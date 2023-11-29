@@ -1,59 +1,56 @@
 library(shiny)
+library(shinyjs)
+library(jsonlite)
 
-# Define UI for app that draws a histogram ----
+library(data.table)
+library(magrittr)
+
+IS_SHINYLIVE <- 
+  grepl("wasm",R.Version()$arch)
+
+fetchDataIntoInput <- function(input)
+  observeEvent(input$getData, "
+      fetch('https://raw.githubusercontent.com/alekrutkowski/JAF2R_shinylive/main/data/data.json')
+        .then(response => response.json())
+        .then(data => Shiny.setInputValue('jsonData', JSON.stringify(data)));
+    " %>% 
+      runjs())
+
+
+importData. <- memoise::memoise(function(input)
+  (
+    if (IS_SHINYLIVE) {
+      if (!is.null(input$jsonData)) {
+        fetchDataIntoInput(input)
+        input$jsonData
+      }
+    } else
+      readLines('../data/data.json',warn=FALSE) %>%
+      paste(collapse="")
+  ) %>% 
+    unserializeJSON() %>% 
+    memDecompress('gzip') %>% 
+    unserialize())
+
+
 ui <- fluidPage(
-
-  # App title ----
-  titlePanel("Hello Shiny!"),
-
-  # Sidebar layout with input and output definitions ----
-  sidebarLayout(
-
-    # Sidebar panel for inputs ----
-    sidebarPanel(
-
-      # Input: Slider for the number of bins ----
-      sliderInput(inputId = "bins",
-                  label = "Number of bins:",
-                  min = 1,
-                  max = 50,
-                  value = 30)
-
-    ),
-
-    # Main panel for displaying outputs ----
-    mainPanel(
-
-      # Output: Histogram ----
-      plotOutput(outputId = "distPlot")
-
-    )
-  )
+  useShinyjs(),  # Initialize shinyjs
+  titlePanel("Shinylive JavaScript GET Request"),
+  actionButton("getData", "Get Data"),
+  tableOutput("dataOutput")
 )
 
-# Define server logic required to draw a histogram ----
 server <- function(input, output) {
-
-  # Histogram of the Old Faithful Geyser Data ----
-  # with requested number of bins
-  # This expression that generates a histogram is wrapped in a call
-  # to renderPlot to indicate that:
-  #
-  # 1. It is "reactive" and therefore should be automatically
-  #    re-executed when inputs (input$bins) change
-  # 2. Its output type is a plot
-  output$distPlot <- renderPlot({
-
-    x    <- faithful$waiting
-    bins <- seq(min(x), max(x), length.out = input$bins + 1)
-
-    hist(x, breaks = bins, col = "#75AADB", border = "white",
-         xlab = "Waiting time to next eruption (in mins)",
-         main = "Histogram of waiting times")
-
-    })
-
+  
+  
+  
+  # Receive the data from JavaScript
+  output$dataOutput <- renderTable({
+    print(getwd())
+    importData.(input) %>% 
+      .$JAF_SCORES %>% 
+      head(20)
+  })
 }
 
-# Create Shiny app ----
-shinyApp(ui = ui, server = server)
+shinyApp(ui, server)
