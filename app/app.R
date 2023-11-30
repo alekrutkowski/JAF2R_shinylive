@@ -1,6 +1,5 @@
 library(shiny)
 library(shinyjs)
-library(jsonlite)
 
 library(data.table)
 library(magrittr)
@@ -8,29 +7,19 @@ library(magrittr)
 IS_SHINYLIVE <- 
   grepl("wasm",R.Version()$arch)
 
-fetchDataIntoInput <- function(input)
-  runjs("
-      fetch('https://raw.githubusercontent.com/alekrutkowski/JAF2R_shinylive/main/data/data.json')
-        .then(response => response.json())
-        .then(data => Shiny.setInputValue('jsonData', JSON.stringify(data)));
-  ")
-
-importData. <- memoise::memoise(function(input)
-  (
-    if (IS_SHINYLIVE) {
-      fetchDataIntoInput(input)
-      input$jsonData
-    } else
-      readLines('../data/data.json',warn=FALSE) %>%
-      paste(collapse="")
-  ) %>% 
-    unserializeJSON() %>% 
-    memDecompress('gzip') %>% 
-    unserialize())
+DATA <- 
+  'data.Rds' %>% 
+  {if (IS_SHINYLIVE)
+    (.) %T>% 
+      download.file(paste0('https://raw.githubusercontent.com/alekrutkowski/JAF2R_shinylive/main/data/',
+                           .),.) else
+        paste0('../data/',.)
+  } %>% 
+  readRDS()
 
 ui <- fluidPage(
   useShinyjs(),  # Initialize shinyjs
-  titlePanel("Shinylive JavaScript GET Request"),
+  titlePanel("JAF indicators"),
   actionButton("doCalc", "Do some calculation"),
   tableOutput("dataOutput")
 )
@@ -38,7 +27,7 @@ ui <- fluidPage(
 server <- function(input, output) {
   
   output$dataOutput <- renderTable({
-    importData.(input) %>% 
+    DATA %>% 
       .$JAF_SCORES %>% 
       head(20)
   })
