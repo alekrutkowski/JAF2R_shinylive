@@ -60,7 +60,7 @@ ui <- fluidPage(
     </div>'),
   selectInput(
     inputId = "SelectedIndics",
-    label = HTML("<strong>Select one or more indicators &ndash; start typing codes or names, use <kbd>Delete</kbd> or <kbd>Backspace</kbd> keyboard keys to delete</strong>"),
+    label = HTML("<strong>&#x1F522; Select one or more indicators &ndash; start typing codes or names, use <kbd>Delete</kbd> or <kbd>Backspace</kbd> keyboard keys to delete</strong>"),
     choices = INDICATORS,
     multiple=TRUE,
     width = "100%"
@@ -73,19 +73,19 @@ ui <- fluidPage(
   ),
   selectInput(
     inputId = "SelectedGeos",
-    label = HTML("<strong>Select countries or country aggregates, use <kbd>Delete</kbd> or <kbd>Backspace</kbd> keyboard keys to delete</strong>"),
+    label = HTML("<strong>&#x1F310; Select countries or country aggregates, use <kbd>Delete</kbd> or <kbd>Backspace</kbd> keyboard keys to delete</strong>"),
     choices = GEOS,
     multiple=TRUE,
     width = "100%"
   ),
   sliderInput(
     inputId = "SelectedYears",
-    label = strong("Select a start year for time series (if you want to see a shorter period)"),
+    label = strong("Select a start year for time series (if you want to see a longer period)"),
     min = min(YEARS),
     max = max(YEARS)-1,
     ticks=FALSE,
     sep="",
-    value = min(YEARS),
+    value = max(YEARS)-1,
     width = "100%",
     step = 1
   ),
