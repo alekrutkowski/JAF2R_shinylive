@@ -102,106 +102,105 @@ selectedVarname <- function(input) {
            !x && !y, 'value_change')
 }
 
-filteredDATA <- function(input)
+filteredDATA <- function(single_indic, input)
   DATA %>% 
   .[[ifScoresSelected(input, 'JAF_SCORES','JAF_GRAND_TABLE_reduced')]] %>% 
-  .[JAF_KEY %in% filteredSelectedIndics(input$SelectedIndics)]
+  .[JAF_KEY %in% filteredSelectedIndics(single_indic)]
 
-hist. <- function(input, subselect=character(0)) {
-  var.. <-
-    selectedVarname(input)
-  dta <-
-    filteredDATA(input) %>%
-    .[!is.na(.[[var..]])] %>% 
-    .[, geo := as.character(geo)] %>% 
-    .[, .SD[time==max(time)], by=geo] %>% 
-    .[, geo := ifelse(time==max(time),geo,paste0(geo,' (',time,')'))]
-  val.. <-
-    dta[grepl(input$SelectedGeos,geo), var.., with=FALSE] %>% as.numeric()
-  valEU.. <-
-    dta[geo==DATA$EU_geo_code, var.., with=FALSE] %>% as.numeric()
-  summaries.. <-
-    dta[, var.., with=FALSE] %>% 
-    .[[1]] %>% 
-    {list(p25=quantile(.,.25),
-          med=median(.),
-          p75=quantile(.,.75))}
-  hist.. <-
-    dta %>% 
-    .[geo %not in% c(DATA$EU_geo_code,DATA$EA_geo_code), 
-      c(var..,'geo'), with=FALSE] %>% {
-        d. <- (.)
-        h. <- hist(d.[[var..]],plot=FALSE)
-        l. <- d. %>% 
-          .[, in_bin_no := 
-              cut(d.[[var..]], breaks=h.$breaks,
-                  include.lowest=TRUE, right=FALSE, labels=F)] %>% 
-          .[, .(l = geo %>% 
-                  paste(collapse=', ') %>% 
-                  strwrap(10) %>% 
-                  paste(collapse='\n'))
-            , by=in_bin_no] %>% 
-          setorder(in_bin_no)
-        data.table(in_bin_no=seq_along(h.$mids),
-                   x=h.$mids,
-                   y=h.$counts) %>% 
-          merge(l., by='in_bin_no', all.x=TRUE)
-      }
-  addVerticalLine <- function(pl, name, x, color, dash='solid')
-    add_trace(pl,
-              name=name,
-              x = x %>% c(., .),
-              y = c(0, max(hist..$y)),
-              text = c("",""), # mandatory
-              type = "scatter", mode = "lines",
-              marker = list(opacity=0),
-              line = list(color=color, dash=dash, width=3))
-  plot_ly(x=hist..$x, y=hist..$y,
-          text=hist..$l,
-          type="bar",
-          marker = list(color='#D3D3D3'),
-          name="All countries") %>% 
-    layout(title=paste0(names(INDICATORS)[INDICATORS==input$SelectedIndics],
-                        ', ',max(dta$time),
-                        '\nThe value for ',names(GEOS)[GEOS==input$SelectedGeos],
-                        ' and the distribution of values across other countries'),
-           xaxis=list(title=paste0(ifScoresSelected(input, 'Score ', 'Indicator value '),
-                                   ifLevelsSelected(input, '(level)', '(change)'))),
-           yaxis=list(title='Number of countries inside each interval'),
-           bargap = 0,
-           margin = list(t = 60), # more space at the top for the title
-           annotations = list(
-             x = val..,
-             y = max(hist..$y),
-             text = paste0(names(GEOS)[GEOS==input$SelectedGeos],': ',round(val..,1)),
-             showarrow = TRUE,
-             arrowhead = 5,
-             font = list(size = 18)
-           )) %>%
-    addVerticalLine(name=paste0(names(GEOS)[GEOS==input$SelectedGeos],': ',
-                                round(val..,1)),
-                    x = val..,
-                    color='black') %>%
-    addVerticalLine(name=paste('25th percentile:',round(summaries..$p25,1)),
-                    x = summaries..$p25,
-                    color='magenta', dash='dash') %>%
-    addVerticalLine(name=paste('75th percentile:',round(summaries..$p75,1)),
-                    x = summaries..$p75,
-                    color='chartreuse', dash='dash') %>% 
-    addVerticalLine(name=paste('Median:',round(summaries..$med,1)),
-                    x = summaries..$med,
-                    color='cyan', dash='dot') %>% 
-    addVerticalLine(name=paste('EU:',round(valEU..,1)),
-                    x = valEU..,
-                    color='blue', dash='dot')
-}
-
-byIndic <- function(expr)
-  bquote(lapply(input$SelectedIndics,
-                     function(x) {
-                       input$SelectedIndics <- x # TO FIX/REFACTOR "Can't modify read-only reactive value 'SelectedIndics"
-                       .(substitute(expr))
-                       }))
+hist. <- function(input) {
+  lapply(X=input$SelectedIndics,
+         input=input,
+         FUN=function(single_indic, input) {
+           var.. <-
+             selectedVarname(input)
+           dta <-
+             filteredDATA(single_indic,input) %>%
+             .[!is.na(.[[var..]])] %>% 
+             .[, geo := as.character(geo)] %>% 
+             .[, .SD[time==max(time)], by=geo] %>% 
+             .[, geo := ifelse(time==max(time),geo,paste0(geo,' (',time,')'))]
+           val.. <-
+             dta[grepl(input$SelectedGeos,geo), var.., with=FALSE] %>% as.numeric()
+           valEU.. <-
+             dta[geo==DATA$EU_geo_code, var.., with=FALSE] %>% as.numeric()
+           summaries.. <-
+             dta[, var.., with=FALSE] %>% 
+             .[[1]] %>% 
+             {list(p25=quantile(.,.25),
+                   med=median(.),
+                   p75=quantile(.,.75))}
+           hist.. <-
+             dta %>% 
+             .[geo %not in% c(DATA$EU_geo_code,DATA$EA_geo_code), 
+               c(var..,'geo'), with=FALSE] %>% {
+                 d. <- (.)
+                 h. <- hist(d.[[var..]],plot=FALSE)
+                 l. <- d. %>% 
+                   .[, in_bin_no := 
+                       cut(d.[[var..]], breaks=h.$breaks,
+                           include.lowest=TRUE, right=FALSE, labels=F)] %>% 
+                   .[, .(l = geo %>% 
+                           paste(collapse=', ') %>% 
+                           strwrap(10) %>% 
+                           paste(collapse='\n'))
+                     , by=in_bin_no] %>% 
+                   setorder(in_bin_no)
+                 data.table(in_bin_no=seq_along(h.$mids),
+                            x=h.$mids,
+                            y=h.$counts) %>% 
+                   merge(l., by='in_bin_no', all.x=TRUE)
+               }
+           addVerticalLine <- function(pl, name, x, color, dash='solid')
+             add_trace(pl,
+                       name=name,
+                       x = x %>% c(., .),
+                       y = c(0, max(hist..$y)),
+                       text = c("",""), # mandatory
+                       type = "scatter", mode = "lines",
+                       marker = list(opacity=0),
+                       line = list(color=color, dash=dash, width=3))
+           plot_ly(x=hist..$x, y=hist..$y,
+                   text=hist..$l,
+                   type="bar",
+                   marker = list(color='#D3D3D3'),
+                   name="All countries") %>% 
+             layout(title=paste0(names(INDICATORS)[INDICATORS==single_indic],
+                                 ', ',max(dta$time),
+                                 '\nThe value for ',names(GEOS)[GEOS==input$SelectedGeos],
+                                 ' and the distribution of values across other countries (a histogram)'),
+                    xaxis=list(title=list(text=paste0(ifScoresSelected(input, 'Score ', 'Indicator value '),
+                                                      ifLevelsSelected(input, '(level)', '(change)')),
+                                          font=list(size=18))),
+                               yaxis=list(title='Number of countries inside each interval'),
+                               bargap = 0,
+                               margin = list(t = 60), # more space at the top for the title
+                               annotations = list(
+                                 x=val..,
+                                 y=max(hist..$y),
+                                 text=paste0(grep(input$SelectedGeos,dta$geo,value=TRUE),': ',round(val..,1)),
+                                 showarrow=TRUE,
+                                 arrowhead=5,
+                                 font=list(size=18)
+                               )) %>%
+                      addVerticalLine(name=paste0(grep(input$SelectedGeos,dta$geo,value=TRUE),': ',
+                                                  round(val..,1)),
+                                      x = val..,
+                                      color='black') %>%
+                      addVerticalLine(name=paste('25th percentile:',round(summaries..$p25,1)),
+                                      x = summaries..$p25,
+                                      color='magenta', dash='dash') %>%
+                      addVerticalLine(name=paste('75th percentile:',round(summaries..$p75,1)),
+                                      x = summaries..$p75,
+                                      color='chartreuse', dash='dash') %>% 
+                      addVerticalLine(name=paste('Median:',round(summaries..$med,1)),
+                                      x = summaries..$med,
+                                      color='cyan', dash='dot') %>% 
+                      addVerticalLine(name=paste('EU:',round(valEU..,1)),
+                                      x = valEU..,
+                                      color='blue', dash='dot') %>% 
+                      renderPlotly()  
+                    })
+           }
 
 selectPlots <- function(input) {
   i <- length(input$SelectedIndics)
@@ -218,13 +217,13 @@ selectPlots <- function(input) {
   if(i==1 && s && g>1 && y) return(sortedBarChart.(input)) # multiple years ignored -- showing only the latest year
   if(i>1 && s && g>1 && y) return(heatmapGrid.(input)) # multiple years ignored -- showing only the latest year
   if(i==1 && !s && g==1 && !y) return(hist.(input)) # 
-  if(i>1 && !s && g==1 && !y) return(eval(byIndic(hist.(input)))) # TO FIX/REFACTOR "Can't modify read-only reactive value 'SelectedIndics" # lapply(by indicator) due to different units
+  if(i>1 && !s && g==1 && !y) return(hist.(input)) # lapply(by indicator) due to different units
   if(i==1 && !s && g>1 && !y) return(sortedBarChart.(input)) # 
-  if(i>1 && !s && g>1 && !y) return(byIndic(sortedBarChart.(input))) # lapply(by indicator) due to different units
+  if(i>1 && !s && g>1 && !y) return(sortedBarChart.(input)) # lapply(by indicator) due to different units
   if(i==1 && !s && g==1 && y) return(linePlotGeoEU.(input)) # 
-  if(i>1 && !s && g==1 && y) return(byIndic(basicLinePlot.(input))) # lapply(by indicator) due to different units
+  if(i>1 && !s && g==1 && y) return(basicLinePlot.(input)) # lapply(by indicator) due to different units
   if(i==1 && !s && g>1 && y) return(basicLinePlot.(input)) # 
-  if(i>1 && !s && g>1 && y) return(byIndic(basicLinePlot.(input))) # lapply(by indicator) due to different units
+  if(i>1 && !s && g>1 && y) return(basicLinePlot.(input)) # lapply(by indicator) due to different units
 }
 
 # App ---------------------------------------------------------------------
@@ -292,7 +291,7 @@ ui <- fluidPage(
     ))),
   tabsetPanel(
     tabPanel("Chart",
-             plotlyOutput("ThePlot")),
+             uiOutput("ThePlotPlace")),
     tabPanel("Table",
              tableOutput("TheTable"))
   )
@@ -307,7 +306,7 @@ server <- function(input, output) {
       head(20)
   })
   
-  output$ThePlot <- renderPlotly({
+  output$ThePlotPlace <- renderUI({
     # TODO add plot type dispatch function based on the length of selected inputs (countries, indics, years)
     selectPlots(input)
   })
