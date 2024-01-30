@@ -80,7 +80,15 @@ GEOS <-
   DATA$EU_Members_geo_names %>% 
   .[, geo__geo_labels :=
       paste0('[',geo,'] ',geo_labels)] %>% 
-  {set_names(as.character(.$geo),.$geo__geo_labels)} # key/name = '[geo] geo_labels', value = 'geo'
+  {set_names(as.character(.$geo),.$geo__geo_labels)} %>% # key/name = '[geo] geo_labels', value = 'geo'
+  c(`All Member States`='All Member States',
+    .)
+
+filteredSelectedGeos <- function(SelectedGeos)
+  SelectedGeos %>% 
+  `if`(is.character(.) && length(.)==1 && .==GEOS['All Member States'],
+       DATA$EU_Members_geo_names$geo %>% .[nchar(.)==2],
+       .)
 
 YEARS <-
   DATA$JAF_GRAND_TABLE_reduced %>% 
@@ -171,60 +179,166 @@ hist. <- function(input) {
                     xaxis=list(title=list(text=paste0(ifScoresSelected(input, 'Score ', 'Indicator value '),
                                                       ifLevelsSelected(input, '(level)', '(change)')),
                                           font=list(size=18))),
-                               yaxis=list(title='Number of countries inside each interval'),
-                               bargap = 0,
-                               margin = list(t = 60), # more space at the top for the title
-                               annotations = list(
-                                 x=val..,
-                                 y=max(hist..$y),
-                                 text=paste0(grep(input$SelectedGeos,dta$geo,value=TRUE),': ',round(val..,1)),
-                                 showarrow=TRUE,
-                                 arrowhead=5,
-                                 font=list(size=18)
-                               )) %>%
-                      addVerticalLine(name=paste0(grep(input$SelectedGeos,dta$geo,value=TRUE),': ',
-                                                  round(val..,1)),
-                                      x = val..,
-                                      color='black') %>%
-                      addVerticalLine(name=paste('25th percentile:',round(summaries..$p25,1)),
-                                      x = summaries..$p25,
-                                      color='magenta', dash='dash') %>%
-                      addVerticalLine(name=paste('75th percentile:',round(summaries..$p75,1)),
-                                      x = summaries..$p75,
-                                      color='chartreuse', dash='dash') %>% 
-                      addVerticalLine(name=paste('Median:',round(summaries..$med,1)),
-                                      x = summaries..$med,
-                                      color='cyan', dash='dot') %>% 
-                      addVerticalLine(name=paste('EU:',round(valEU..,1)),
-                                      x = valEU..,
-                                      color='blue', dash='dot') %>% 
-                      renderPlotly()  
-                    })
-           }
+                    yaxis=list(title='Number of countries inside each interval'),
+                    bargap = 0,
+                    margin = list(t = 60), # more space at the top for the title
+                    annotations = list(
+                      x=val..,
+                      y=max(hist..$y),
+                      text=paste0(grep(input$SelectedGeos,dta$geo,value=TRUE),': ',round(val..,1)),
+                      showarrow=TRUE,
+                      arrowhead=5,
+                      font=list(size=18)
+                    )) %>%
+             addVerticalLine(name=paste0(grep(input$SelectedGeos,dta$geo,value=TRUE),': ',
+                                         round(val..,1)),
+                             x = val..,
+                             color='black') %>%
+             addVerticalLine(name=paste('25th percentile:',round(summaries..$p25,1)),
+                             x = summaries..$p25,
+                             color='magenta', dash='dash') %>%
+             addVerticalLine(name=paste('75th percentile:',round(summaries..$p75,1)),
+                             x = summaries..$p75,
+                             color='chartreuse', dash='dash') %>% 
+             addVerticalLine(name=paste('Median:',round(summaries..$med,1)),
+                             x = summaries..$med,
+                             color='cyan', dash='dot') %>% 
+             addVerticalLine(name=paste('EU:',round(valEU..,1)),
+                             x = valEU..,
+                             color='blue', dash='dot') %>% 
+             renderPlotly()  
+         })
+}
+
+# sortedBarChart_plot <- function(input,
+#                                 xcatvarname,
+#                                 marked=NULL,
+#                                 byvarname='JAF_KEY') {
+#   
+# }
+# 
+# if (input$SelectedScore=='TRUE' && input$SelectedIndics>1) 
+#   sortedBarChart_plot(input, xcatvarname='JAF_KEY', marked=input$SelectedGeos, byvarname=NULL) else
+#     sortedBarChart_plot(input, xcatvarname='geo')
+
+
+sortedBarChart. <- function(input) {
+  lapply(X=input$SelectedIndics,
+         input=input,
+         FUN=function(single_indic, input) {
+           var.. <-
+             selectedVarname(input)
+           dta <-
+             filteredDATA(single_indic,input) %>%
+             .[!is.na(.[[var..]])] %>% 
+             .[, .SD[time==max(time)], by=geo] %>% 
+             .[, geo := as.character(geo)]
+           dta_with_ordered_geos <-
+             dta %>% 
+             .[geo %in% filteredSelectedGeos(input$SelectedGeos)] %>% 
+             .[, geo := ifelse(time==max(time),geo,paste0(geo,'\n(',time,')'))] %>% 
+             .[, geo := factor(geo,levels=geo[order(get(var..),decreasing=TRUE)],ordered=TRUE)]
+           valEU.. <-
+             dta[geo==DATA$EU_geo_code, var.., with=FALSE] %>% as.numeric()
+           addHorizontalLine <- function(pl, name, y, color, dash='solid')
+             add_trace(pl,
+                       name=name,
+                       y = rep(y, length(dta_with_ordered_geos$geo)),
+                       x = dta_with_ordered_geos$geo,
+                       # text = c("",""), # mandatory
+                       type = "scatter", mode = "lines",
+                       marker = list(opacity=0),
+                       line = list(color=color, dash=dash, width=3))
+           plot_ly(x=dta_with_ordered_geos$geo, y=dta_with_ordered_geos[[var..]],
+                   text = round(dta_with_ordered_geos[[var..]],1), # Add data labels
+                   textposition = 'outside',
+                   type="bar",
+                   marker = list(color='#D3D3D3'),
+                   name="Selected countries") %>% 
+             layout(title=paste0(names(INDICATORS)[INDICATORS==single_indic],
+                                 ', ',max(dta$time)),
+                    xaxis=list(title=NULL),
+                    yaxis=list(title=list(text=paste0(ifScoresSelected(input, 'Score ', 'Indicator value '),
+                                                      ifLevelsSelected(input, '(level)', '(change)')),
+                                          font=list(size=18))),
+                    bargap = 5,
+                    margin = list(t=60) # more space at the top for the title
+             ) %>%
+             addHorizontalLine(name=paste('EU:',round(valEU..,1)),
+                               y = valEU..,
+                               color='blue') %>%
+             renderPlotly()  
+         })
+}
+
+sortedHorizBarChart. <- function(input) {
+  var.. <-
+    selectedVarname(input)
+  dta <-
+    filteredDATA(input$SelectedIndics,input) %>%
+    .[!is.na(.[[var..]])] %>% 
+    .[, .SD[time==max(time)], by=.(geo,JAF_KEY)]
+  dta_with_ordered_indics <-
+    dta %>% 
+    .[, geo := as.character(geo)] %>% 
+    .[geo == input$SelectedGeos] %>% 
+    merge(DATA$JAF_SCORES %>% 
+            .[,.(JAF_KEY,Description)] %>% 
+            unique() %>% 
+            .[, JAF_KEY__Description :=
+                paste0('[',JAF_KEY,'] ',Description)],
+          by='JAF_KEY') %>% 
+    .[, JAF_KEY__Description := ifelse(time==max(time),
+                                       JAF_KEY__Description,
+                                       paste0(JAF_KEY__Description,', ',time))] %>% 
+    .[, JAF_KEY := factor(JAF_KEY__Description,
+                          levels=JAF_KEY__Description[order(get(var..),decreasing=TRUE)],
+                          ordered=TRUE)]
+  plot_ly(y=dta_with_ordered_indics$JAF_KEY,
+          x=dta_with_ordered_indics[[var..]],
+          text = round(dta_with_ordered_indics[[var..]],1), # Add data labels
+          textposition = 'outside',
+          type="bar",
+          marker = list(color='#D3D3D3'),
+          name="Selected countries",
+          height=100+30*length(dta_with_ordered_indics$JAF_KEY)) %>% 
+    layout(title=paste0(names(GEOS)[GEOS==input$SelectedGeos],', ',max(dta_with_ordered_indics$time)),
+           yaxis=list(title=NULL, showgrid=TRUE, gridcolor='#f5f5f5', gridwidth=1),
+           xaxis=list(title=list(text=paste0(ifScoresSelected(input, 'Score ', 'Indicator value '),
+                                             ifLevelsSelected(input, '(level)', '(change)')),
+                                 font=list(size=18))),
+           bargap = 5,
+           margin = list(t=60) # more space at the top for the title
+    ) %>%
+    renderPlotly()  
+}
 
 selectPlots <- function(input) {
   i <- length(input$SelectedIndics)
   s <- identical(input$SelectedScore,'TRUE')
-  g <- length(input$SelectedGeos)
+  g <- if (identical(input$SelectedGeos,'All Member States'))
+    27L else length(input$SelectedGeos)
   y <- input$SelectedYears < max(YEARS)
   if (i==0 || g==0) return(NULL)
-  if(i==1 && s && g==1 && !y) return(hist.(input)) # 
-  if(i>1 && s && g==1 && !y) return(sortedBarChart.(input)) # 
-  if(i==1 && s && g>1 && !y) return(sortedBarChart.(input)) # 
-  if(i>1 && s && g>1 && !y) return(heatmapGrid.(input)) # 
-  if(i==1 && s && g==1 && y) return(hist.(input)) # multiple years ignored -- showing only the latest year
-  if(i>1 && s && g==1 && y) return(sortedBarChart.(input)) # multiple years ignored -- showing only the latest year
-  if(i==1 && s && g>1 && y) return(sortedBarChart.(input)) # multiple years ignored -- showing only the latest year
-  if(i>1 && s && g>1 && y) return(heatmapGrid.(input)) # multiple years ignored -- showing only the latest year
+  if(i> 1 &&  s && g==1 && !y) return(sortedHorizBarChart.(input)) # 
+  if(i==1 &&  s && g> 1 && !y) return(sortedBarChart.(input)) # 
+  if(i> 1 &&  s && g> 1 && !y) return(heatmapGrid.(input)) # 
+  if(i==1 &&  s && g==1 &&  y) return(hist.(input)) # multiple years ignored -- showing only the latest year
+  if(i> 1 &&  s && g==1 &&  y) return(sortedHorizBarChart.(input)) # multiple years ignored -- showing only the latest year
+  if(i==1 &&  s && g> 1 &&  y) return(sortedBarChart.(input)) # multiple years ignored -- showing only the latest year
+  if(i> 1 &&  s && g> 1 &&  y) return(heatmapGrid.(input)) # multiple years ignored -- showing only the latest year
   if(i==1 && !s && g==1 && !y) return(hist.(input)) # 
-  if(i>1 && !s && g==1 && !y) return(hist.(input)) # lapply(by indicator) due to different units
-  if(i==1 && !s && g>1 && !y) return(sortedBarChart.(input)) # 
-  if(i>1 && !s && g>1 && !y) return(sortedBarChart.(input)) # lapply(by indicator) due to different units
-  if(i==1 && !s && g==1 && y) return(linePlotGeoEU.(input)) # 
-  if(i>1 && !s && g==1 && y) return(basicLinePlot.(input)) # lapply(by indicator) due to different units
-  if(i==1 && !s && g>1 && y) return(basicLinePlot.(input)) # 
-  if(i>1 && !s && g>1 && y) return(basicLinePlot.(input)) # lapply(by indicator) due to different units
+  if(i> 1 && !s && g==1 && !y) return(hist.(input)) # lapply(by indicator) due to different units
+  if(i==1 && !s && g> 1 && !y) return(sortedBarChart.(input)) # 
+  if(i> 1 && !s && g> 1 && !y) return(sortedBarChart.(input)) # lapply(by indicator) due to different units
+  if(i==1 && !s && g==1 &&  y) return(linePlotGeoEU.(input)) # 
+  if(i> 1 && !s && g==1 &&  y) return(basicLinePlot.(input)) # lapply(by indicator) due to different units
+  if(i==1 && !s && g> 1 &&  y) return(basicLinePlot.(input)) # 
+  if(i> 1 && !s && g> 1 &&  y) return(basicLinePlot.(input)) # lapply(by indicator) due to different units
 }
+
+kbd_info <-
+  ', use <kbd>Delete</kbd> or <kbd>Backspace</kbd> keyboard keys to delete. &nbsp;Use <kbd>Esc</kbd> to hide the drop-down menu.'
 
 # App ---------------------------------------------------------------------
 
@@ -241,6 +355,10 @@ ui <- fluidPage(
     .right-text {
       /* Optional styling for right text */
     }
+    .irs-bar, .irs-bar-edge {
+        background: transparent !important;
+        border-color: transparent !important;
+    }
     "))),
   HTML(paste0('
     <div class="flex-container">
@@ -251,15 +369,16 @@ ui <- fluidPage(
     </div>')), # TODO add above 'shiny' or 'shinylive' before the logo
   selectInput(
     inputId = "SelectedIndics",
-    label = HTML("<strong><big><big>&#x1F522;</big></big> Select one or more indicators &ndash; start typing codes or names, use <kbd>Delete</kbd> or <kbd>Backspace</kbd> keyboard keys to delete</strong><br>",
-                 '<small>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Hint: Type <code>.O</code> to see "Overall" indicators or <code>.S</code> for "Subindicators" or <code>.C</code> for "Context" indicators</small>'),
+    label = HTML("<strong><big><big>&#8505;&#65039;</big></big> Select one or more indicators &ndash; start typing codes or names",kbd_info,"<br></strong>",
+                 '<small>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Hint: Type <code>.O</code> to see "Overall" indicators or <code>.S</code> for "Subindicators" or <code>.C</code> for "Context" indicators in the dropdown menu list.',
+                 '&nbsp;Similarly, type e.g. <code>PA6a</code> to  see Policy Area 6a indicators.</small>'),
     choices = INDICATORS,
     multiple=TRUE,
     width = "100%"
   ),
   selectInput(
     inputId = "SelectedGeos",
-    label = HTML("<strong><big><big>&#x1F310;</big></big> Select countries or country aggregates, use <kbd>Delete</kbd> or <kbd>Backspace</kbd> keyboard keys to delete</strong>"),
+    label = HTML("<strong><big><big>&#x1F310;</big></big> Select countries or country aggregates",kbd_info,'</strong>'),
     choices = GEOS,
     multiple=TRUE,
     width = "100%"
