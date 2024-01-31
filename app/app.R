@@ -95,7 +95,9 @@ GEOS <-
 YEARS <-
   DATA$JAF_GRAND_TABLE_reduced %>% 
   unique() %>% 
-  .$time
+  .$time %>% 
+  as.integer() %>% 
+  .[.>=2000]
 
 ifScoresSelected <- function(input, x, y)
   if (identical(input$SelectedScore,'TRUE')) x else y
@@ -229,6 +231,7 @@ sortedBarChart. <- function(input) {
   lapply(X=input$SelectedIndics,
          input=input,
          FUN=function(single_indic, input) {
+           if (input$toggle) return(NULL)
            var.. <-
              selectedVarname(input)
            dta <-
@@ -316,6 +319,47 @@ sortedHorizBarChart. <- function(input) {
     renderPlotly()  
 }
 
+basicLinePlot. <- function(input) {
+  lapply(X=input$SelectedIndics,
+         input=input,
+         FUN=function(single_indic, input) {
+           if (input$toggle) return(NULL)
+           var.. <-
+             selectedVarname(input)
+           dta <-
+             filteredDATA(single_indic,input) %>%
+             .[!is.na(.[[var..]])] %>% 
+             .[, geo := as.character(geo)] %>% 
+             .[, time := as.integer(time)] %>% 
+             .[as.integer(input$SelectedYears)<=time] %>% 
+             .[geo %in% input$SelectedGeos]
+           if (length(unique(dta$time))==1)
+             return(return(renderUI(div(class="red-frame",
+                                        paste0(single_indic,': No time series, only one time point is available')))))
+           plot_ly(x=dta$time, y=dta[[var..]],
+                   color=as.factor(dta$geo),
+                   text = round(dta[[var..]],1), # Add data labels
+                   textposition = 'outside',
+                   type="scatter", mode='lines' #,
+                   # marker = list(color='#D3D3D3') # ,
+                   # name="Selected countries"
+           ) %>% 
+             layout(title=paste0(names(INDICATORS)[INDICATORS==single_indic],
+                                 ifelse(length(input$SelectedGeos)==1,
+                                        paste0(', ',names(GEOS)[GEOS==input$SelectedGeos]),"")),
+                    xaxis=list(title=NULL,
+                               dtick = 1, # Set gridlines at every integer
+                               tickmode = "linear",
+                               range=c(min(dta$time),max(dta$time))),
+                    yaxis=list(title=list(text=paste0(ifScoresSelected(input, 'Score ', 'Indicator value '),
+                                                      ifLevelsSelected(input, '(level)', '(change)')),
+                                          font=list(size=18))),
+                    margin = list(t=60) # more space at the top for the title
+             ) %>%
+             renderPlotly()  
+         })
+}
+
 selectPlots <- function(input) {
   if (input$toggle) return(renderUI(div(class="red-frame",
                                         'App suspended by the user')))
@@ -324,6 +368,7 @@ selectPlots <- function(input) {
   g <- length(input$SelectedGeos)
   y <- input$SelectedYears < max(YEARS)
   if (i==0 || g==0) return(NULL)
+  if(i==1 && s && g==1 && !y) return(hist.(input)) # 
   if(i> 1 &&  s && g==1 && !y) return(sortedHorizBarChart.(input)) # 
   if(i==1 &&  s && g> 1 && !y) return(sortedBarChart.(input)) # 
   if(i> 1 &&  s && g> 1 && !y) return(heatmapGrid.(input)) # 
@@ -335,8 +380,8 @@ selectPlots <- function(input) {
   if(i> 1 && !s && g==1 && !y) return(hist.(input)) # lapply(by indicator) due to different units
   if(i==1 && !s && g> 1 && !y) return(sortedBarChart.(input)) # 
   if(i> 1 && !s && g> 1 && !y) return(sortedBarChart.(input)) # lapply(by indicator) due to different units
-  if(i==1 && !s && g==1 &&  y) return(linePlotGeoEU.(input)) # 
-  if(i> 1 && !s && g==1 &&  y) return(basicLinePlot.(input)) # lapply(by indicator) due to different units
+  if(i==1 && !s && g==1 &&  y) return(linePlotGeoEU.(input)) # lapply(by indicator) due to different units
+  if(i> 1 && !s && g==1 &&  y) return(linePlotGeoEU.(input)) # lapply(by indicator) due to different units
   if(i==1 && !s && g> 1 &&  y) return(basicLinePlot.(input)) # 
   if(i> 1 && !s && g> 1 &&  y) return(basicLinePlot.(input)) # lapply(by indicator) due to different units
 }
@@ -503,7 +548,7 @@ ui <- fluidPage(
     )),
     column(4,sliderInput(
       inputId = "SelectedYears",
-      label = strong("Select a start year for time series of values (if you want to see a longer period)"),
+      label = strong("Select a start year for time series of values (if you want to see a longer period, but only the available years will be displayed)."),
       min = min(YEARS),
       max = max(YEARS),
       ticks=FALSE,
