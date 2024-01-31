@@ -66,29 +66,31 @@ INDICATORS <-
   unique() %>% 
   .[, JAF_KEY__Description :=
       paste0('[',JAF_KEY,'] ',Description)] %>% 
-  {set_names(.$JAF_KEY,.$JAF_KEY__Description)} %>% # key/name = '[JAF_KEY] Description', value = 'JAF_KEY'
-  c(`All Main Indicators`=paste(Main_Indicators_Codes, collapse=', '),
+  {set_names(.$JAF_KEY,
+             .$JAF_KEY__Description)} %>% # key/name = '[JAF_KEY] Description', value = 'JAF_KEY'
+  c('Select all Main Indicators (can be slow!)',
+    'Remove all the selected indicators',
     .)
 
-filteredSelectedIndics <- function(SelectedIndics)
-  SelectedIndics %>% 
-  `if`(is.character(.) && length(.)==1 && .==INDICATORS['All Main Indicators'],
-       Main_Indicators_Codes,
-       .)
+# filteredSelectedIndics <- function(SelectedIndics)
+#   SelectedIndics %>% 
+#   `if`(is.character(.) && length(.)==1 && .==INDICATORS['All Main Indicators'],
+#        Main_Indicators_Codes,
+#        .)
 
 GEOS <-
   DATA$EU_Members_geo_names %>% 
   .[, geo__geo_labels :=
       paste0('[',geo,'] ',geo_labels)] %>% 
-  {set_names(as.character(.$geo),.$geo__geo_labels)} %>% # key/name = '[geo] geo_labels', value = 'geo'
-  c(`All Member States`='All Member States',
-    .)
+  {c('Select all the Member States',
+     'Remove all the selected countries',
+     set_names(as.list(.$geo),.$geo__geo_labels))} # key/name = '[geo] geo_labels', value = 'geo'
 
-filteredSelectedGeos <- function(SelectedGeos)
-  SelectedGeos %>% 
-  `if`(is.character(.) && length(.)==1 && .==GEOS['All Member States'],
-       DATA$EU_Members_geo_names$geo %>% .[nchar(.)==2],
-       .)
+# filteredSelectedGeos <- function(SelectedGeos)
+#   SelectedGeos %>% 
+#   `if`(is.character(.) && length(.)==1 && .==GEOS['All Member States'],
+#        DATA$EU_Members_geo_names$geo %>% .[nchar(.)==2],
+#        .)
 
 YEARS <-
   DATA$JAF_GRAND_TABLE_reduced %>% 
@@ -110,15 +112,16 @@ selectedVarname <- function(input) {
            !x && !y, 'value_change')
 }
 
-filteredDATA <- function(single_indic, input)
+filteredDATA <- function(jaf_key, input)
   DATA %>% 
   .[[ifScoresSelected(input, 'JAF_SCORES','JAF_GRAND_TABLE_reduced')]] %>% 
-  .[JAF_KEY %in% filteredSelectedIndics(single_indic)]
+  .[JAF_KEY %in% jaf_key]
 
 hist. <- function(input) {
   lapply(X=input$SelectedIndics,
          input=input,
          FUN=function(single_indic, input) {
+           if (input$toggle) return(NULL)
            var.. <-
              selectedVarname(input)
            dta <-
@@ -235,7 +238,7 @@ sortedBarChart. <- function(input) {
              .[, geo := as.character(geo)]
            dta_with_ordered_geos <-
              dta %>% 
-             .[geo %in% filteredSelectedGeos(input$SelectedGeos)] %>% 
+             .[geo %in% input$SelectedGeos] %>% 
              .[, geo := ifelse(time==max(time),geo,paste0(geo,'\n(',time,')'))] %>% 
              .[, geo := factor(geo,levels=geo[order(get(var..),decreasing=TRUE)],ordered=TRUE)]
            valEU.. <-
@@ -289,8 +292,8 @@ sortedHorizBarChart. <- function(input) {
                 paste0('[',JAF_KEY,'] ',Description)],
           by='JAF_KEY') %>% 
     .[, JAF_KEY__Description := ifelse(time==max(time),
-                                       JAF_KEY__Description,
-                                       paste0(JAF_KEY__Description,', ',time))] %>% 
+                                       paste0(JAF_KEY__Description,' '),
+                                       paste0(JAF_KEY__Description,', ',time,' '))] %>% 
     .[, JAF_KEY := factor(JAF_KEY__Description,
                           levels=JAF_KEY__Description[order(get(var..),decreasing=TRUE)],
                           ordered=TRUE)]
@@ -314,10 +317,11 @@ sortedHorizBarChart. <- function(input) {
 }
 
 selectPlots <- function(input) {
+  if (input$toggle) return(renderUI(div(class="red-frame",
+                                        'App suspended by the user')))
   i <- length(input$SelectedIndics)
   s <- identical(input$SelectedScore,'TRUE')
-  g <- if (identical(input$SelectedGeos,'All Member States'))
-    27L else length(input$SelectedGeos)
+  g <- length(input$SelectedGeos)
   y <- input$SelectedYears < max(YEARS)
   if (i==0 || g==0) return(NULL)
   if(i> 1 &&  s && g==1 && !y) return(sortedHorizBarChart.(input)) # 
@@ -338,7 +342,7 @@ selectPlots <- function(input) {
 }
 
 kbd_info <-
-  ', use <kbd>Delete</kbd> or <kbd>Backspace</kbd> keyboard keys to delete. &nbsp;Use <kbd>Esc</kbd> to hide the drop-down menu.'
+  'use <kbd>Delete</kbd> or <kbd>Backspace</kbd> keyboard keys to delete, use <kbd>Esc</kbd> to hide the drop-down menu.'
 
 # App ---------------------------------------------------------------------
 
@@ -359,7 +363,100 @@ ui <- fluidPage(
         background: transparent !important;
         border-color: transparent !important;
     }
-    "))),
+            #loading {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                margin-top: -50px;
+                margin-left: -50px;
+                z-index: 100;
+                display: none;
+            }
+
+            .spinner {
+                width: 100px;
+                height: 100px;
+                border: 16px solid #f3f3f3;
+                border-top: 16px solid #3498db;
+                border-radius: 50%;
+                animation: spin 2s linear infinite;
+            }
+
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+
+            .switch {
+              position: relative;
+              display: inline-block;
+              width: 60px; /* Width of the switch */
+              height: 34px; /* Height of the switch */
+            }
+
+            .switch input {
+              opacity: 0;
+              width: 0;
+              height: 0;
+            }
+
+            .slider {
+              position: absolute;
+              cursor: pointer;
+              top: 0;
+              left: 0;
+              right: 0;
+              bottom: 0;
+              background-color: #ccc;
+              -webkit-transition: .4s;
+              transition: .4s;
+              border-radius: 34px; /* Rounded corners of the switch */
+            }
+
+            .slider:before {
+              position: absolute;
+              content: '';
+              height: 20px; /* Height of the circle */
+              width: 20px;  /* Width of the circle */
+              left: 7px;    /* Position from the left */
+              bottom: 5px;  /* Position from the bottom */
+              background-color: black;
+              -webkit-transition: .4s;
+              transition: .4s;
+              border-radius: 50%; /* Makes the circle round */
+            }
+
+            input:checked + .slider {
+              background-color: red;
+            }
+
+            input:checked + .slider:before {
+              -webkit-transform: translateX(26px);
+              -ms-transform: translateX(26px);
+              transform: translateX(26px);
+            }
+    
+            .red-frame {
+                border: 1px solid red;  /* Red border */
+                border-radius: 10px;   /* Rounded corners */
+                padding: 10px;         /* Some padding around the text */
+                margin: 10px;          /* Margin around the div */
+                color: red;            /* Red text color */
+                display: inline-block; /* Make the div only as wide as its content */
+            }
+    
+    ")),
+    tags$script(HTML("
+            $(document).on('shiny:busy', function(event) {
+                $('#loading').show();
+            });
+
+            $(document).on('shiny:idle', function(event) {
+                $('#loading').hide();
+            });
+        "))
+  ),
+  tags$div(id = "loading", class = "spinner"),
   HTML(paste0('
     <div class="flex-container">
       <div class="left-text"><h1>JAF Indicators</h1></div>
@@ -367,9 +464,16 @@ ui <- fluidPage(
       <img src="https://raw.githubusercontent.com/alekrutkowski/JAF2R/main/JAF2R_logo_v3.png" alt="JAF2R project logo" height="40"/>
       </div>
     </div>')), # TODO add above 'shiny' or 'shinylive' before the logo
+  # Checkbox input styled as a toggle switch
+  tags$div(class = "switch",
+           tags$input(id = "toggle", type = "checkbox", class = "switch-input"),
+           tags$label(`for` = "toggle", class = "slider round"),
+  ),
+  HTML('<sub><big><sub><big><big><strong>&nbsp;A switch to <span style="color:red;">stop</span> all the calculations and pick the selections below without immediate recalculation of the output</strong></big></big></sub></big></sub>'),
+  # textOutput('tmp'),
   selectInput(
     inputId = "SelectedIndics",
-    label = HTML("<strong><big><big>&#8505;&#65039;</big></big> Select one or more indicators &ndash; start typing codes or names",kbd_info,"<br></strong>",
+    label = HTML("<strong><big><big>&#8505;&#65039;</big></big> Select one or more indicators: start typing codes or names,",kbd_info,"<br></strong>",
                  '<small>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Hint: Type <code>.O</code> to see "Overall" indicators or <code>.S</code> for "Subindicators" or <code>.C</code> for "Context" indicators in the dropdown menu list.',
                  '&nbsp;Similarly, type e.g. <code>PA6a</code> to  see Policy Area 6a indicators.</small>'),
     choices = INDICATORS,
@@ -378,7 +482,7 @@ ui <- fluidPage(
   ),
   selectInput(
     inputId = "SelectedGeos",
-    label = HTML("<strong><big><big>&#x1F310;</big></big> Select countries or country aggregates",kbd_info,'</strong>'),
+    label = HTML("<strong><big><big>&#x1F310;</big></big> Select countries or country aggregates,",kbd_info,'</strong>'),
     choices = GEOS,
     multiple=TRUE,
     width = "100%"
@@ -417,7 +521,37 @@ ui <- fluidPage(
   
 )
 
-server <- function(input, output) {
+server <- function(input, output, session) {
+  
+  # debouncedInput <- reactive({
+  #   input
+  # }) %>% debounce(2000) # 2 second delay
+  
+  output$tmp <- renderText(input$toggle)
+  
+  observe({
+    input$SelectedIndics %>% {
+      if(!is.null(.) && 'Select all Main Indicators (can be slow!)' %in% .)
+        updateSelectInput(session,
+                          inputId = "SelectedIndics",
+                          selected=Main_Indicators_Codes)
+      if (!is.null(.) && 'Remove all the selected indicators' %in% .)
+        updateSelectInput(session,
+                          inputId = "SelectedIndics",
+                          selected=character(0))
+    }})
+  
+  observe({
+    input$SelectedGeos %>% {
+      if (!is.null(.) && 'Select all the Member States' %in% .)
+        updateSelectInput(session,
+                          inputId = "SelectedGeos",
+                          selected=DATA$EU_Members_geo_names$geo %>% .[nchar(.)==2])
+      if (!is.null(.) && 'Remove all the selected countries' %in% .)
+        updateSelectInput(session,
+                          inputId = "SelectedGeos",
+                          selected=character(0))
+    }})
   
   output$TheTable <- renderTable({
     DATA %>% 
