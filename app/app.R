@@ -3,6 +3,7 @@ library(plotly)
 library(data.table)
 library(magrittr)
 library(kit)
+library(openxlsx2)
 # dev mode: setwd('app')
 
 IS_SHINYLIVE <- 
