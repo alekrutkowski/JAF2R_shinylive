@@ -65,11 +65,11 @@ INDICATORS <-
   .[,.(JAF_KEY,Description)] %>% 
   unique() %>% 
   .[, JAF_KEY__Description :=
-      paste0('[',JAF_KEY,'] ',Description)] %>% 
+      paste0('[',JAF_KEY,'] ',Description %>% gsub(' ,',",",.,fixed=TRUE))] %>% 
   {set_names(.$JAF_KEY,
              .$JAF_KEY__Description)} %>% # key/name = '[JAF_KEY] Description', value = 'JAF_KEY'
-  c('Select all Main Indicators (can be slow!)',
-    'Remove all the selected indicators',
+  c('\u2295 Select all Main Indicators (can be slow!)',
+    '\u2296 Remove all the selected indicators',
     .)
 
 # filteredSelectedIndics <- function(SelectedIndics)
@@ -82,8 +82,8 @@ GEOS <-
   DATA$EU_Members_geo_names %>% 
   .[, geo__geo_labels :=
       paste0('[',geo,'] ',geo_labels)] %>% 
-  {c('Select all the Member States',
-     'Remove all the selected countries',
+  {c('\u2295 Select all the Member States',
+     '\u2296 Remove all the selected countries',
      set_names(as.list(.$geo),.$geo__geo_labels))} # key/name = '[geo] geo_labels', value = 'geo'
 
 # filteredSelectedGeos <- function(SelectedGeos)
@@ -360,6 +360,59 @@ basicLinePlot. <- function(input) {
          })
 }
 
+linePlotGeoEU. <- function(input) {
+  lapply(X=input$SelectedIndics,
+         input=input,
+         FUN=function(single_indic, input) {
+           if (input$toggle) return(NULL)
+           var.. <-
+             selectedVarname(input)
+           dta <-
+             filteredDATA(single_indic,input) %>%
+             .[!is.na(.[[var..]])] %>% 
+             .[, geo := as.character(geo) %>% 
+                 factor(levels=rev(c(input$SelectedGeos,
+                                     unique(grep('^EU',geo,value=TRUE)),
+                                     unique(grep('^EA',geo,value=TRUE)))) %>% 
+                          c(setdiff(unique(geo),.),.) # important so that the selected country is in front
+                 )] %>% 
+             .[, time := as.integer(time)] %>% 
+             .[as.integer(input$SelectedYears)<=time]#  %>% 
+           # .[geo %in% input$SelectedGeos]
+           if (length(unique(dta$time))==1)
+             return(return(renderUI(div(class="red-frame",
+                                        paste0(single_indic,': No time series, only one time point is available')))))
+           plot_ly(x=dta$time, y=dta[[var..]],
+                   color=dta$geo,
+                   colors=kit::nif(
+                     grepl('^EU',dta$geo), 'blue',
+                     grepl('^EA',dta$geo), 'lightblue',
+                     dta$geo==input$SelectedGeos, 'black',
+                     default='#e6e6e6'
+                   ) %>% set_names(dta$geo),
+                   text = round(dta[[var..]],1), # Add data labels
+                   textposition = 'outside',
+                   type="scatter", mode='lines',
+                   height=700
+           ) %>% 
+             layout(title=paste0(names(INDICATORS)[INDICATORS==single_indic],
+                                 ifelse(length(input$SelectedGeos)==1,
+                                        paste0(', ',names(GEOS)[GEOS==input$SelectedGeos]),"")),
+                    xaxis=list(title=NULL,
+                               dtick = 1, # Set gridlines at every integer
+                               tickmode = "linear",
+                               range=c(min(dta$time),max(dta$time))),
+                    yaxis=list(title=list(text=paste0(ifScoresSelected(input, 'Score ', 'Indicator value '),
+                                                      ifLevelsSelected(input, '(level)', '(change)')),
+                                          font=list(size=18))),
+                    margin = list(t=60), # more space at the top for the title
+                    legend = list(font = list(size = 8))
+             ) %>%
+             renderPlotly() %>% 
+             div(style="height:710px;",.) # needed to avoid the vertical truncations in a list of plots
+         })
+}
+
 selectPlots <- function(input) {
   if (input$toggle) return(renderUI(div(class="red-frame",
                                         'App suspended by the user')))
@@ -576,11 +629,11 @@ server <- function(input, output, session) {
   
   observe({
     input$SelectedIndics %>% {
-      if(!is.null(.) && 'Select all Main Indicators (can be slow!)' %in% .)
+      if(!is.null(.) && '\u2295 Select all Main Indicators (can be slow!)' %in% .)
         updateSelectInput(session,
                           inputId = "SelectedIndics",
                           selected=Main_Indicators_Codes)
-      if (!is.null(.) && 'Remove all the selected indicators' %in% .)
+      if (!is.null(.) && '\u2296 Remove all the selected indicators' %in% .)
         updateSelectInput(session,
                           inputId = "SelectedIndics",
                           selected=character(0))
@@ -588,11 +641,11 @@ server <- function(input, output, session) {
   
   observe({
     input$SelectedGeos %>% {
-      if (!is.null(.) && 'Select all the Member States' %in% .)
+      if (!is.null(.) && '\u2295 Select all the Member States' %in% .)
         updateSelectInput(session,
                           inputId = "SelectedGeos",
                           selected=DATA$EU_Members_geo_names$geo %>% .[nchar(.)==2])
-      if (!is.null(.) && 'Remove all the selected countries' %in% .)
+      if (!is.null(.) && '\u2296 Remove all the selected countries' %in% .)
         updateSelectInput(session,
                           inputId = "SelectedGeos",
                           selected=character(0))
