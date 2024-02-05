@@ -45,14 +45,20 @@ sort_JAF_KEY <- function(JAF_KEY) {
     .[order(pa[[1]],pa[[2]],mid[[1]],mid[[2]],.)]
 }
 
+order_by_JAF_KEY <- function(dt)
+  dt$JAF_KEY %>% 
+  sort_JAF_KEY() %>% 
+  data.table(JAF_KEY=.,
+             .ordering.=seq_along(.)) %>% 
+  merge(dt, by='JAF_KEY') %>% 
+  setorder(.ordering.) %>% 
+  .[, .ordering. := NULL]
+
 Main_Indicators_Codes <-
   DATA %>% 
   .$JAF_NAMES_DESCRIPTIONS %>%
   .[(for_Main), JAF_KEY] %>%
-  sort_JAF_KEY() %>%
-  data.table(JAF_KEY=.,
-             Main_Indicators_order = seq_along(.)) %>% 
-  .$JAF_KEY
+  sort_JAF_KEY()
 
 # Indicator_Codes_by_PA <-
 #   DATA %>% 
@@ -65,6 +71,7 @@ INDICATORS <-
   DATA$JAF_SCORES %>% 
   .[,.(JAF_KEY,Description)] %>% 
   unique() %>% 
+  order_by_JAF_KEY() %>% 
   .[, JAF_KEY__Description :=
       paste0('[',JAF_KEY,'] ',Description %>% gsub(' ,',",",.,fixed=TRUE))] %>% 
   {set_names(.$JAF_KEY,
@@ -286,7 +293,7 @@ sortedHorizBarChart. <- function(input) {
     .[!is.na(.[[var..]])] %>% 
     .[, .SD[time==max(time)], by=.(geo,JAF_KEY)]
   dta_with_ordered_indics <-
-    dta %>% 
+    copy(dta) %>% 
     .[, geo := as.character(geo)] %>% 
     .[geo == input$SelectedGeos] %>% 
     merge(DATA$JAF_SCORES %>% 
@@ -412,6 +419,84 @@ linePlotGeoEU. <- function(input) {
              renderPlotly() %>% 
              div(style="height:710px;",.) # needed to avoid the vertical truncations in a list of plots
          })
+}
+
+colorPalette <- colorRamp(c("red","white","green"))
+
+mode. <- function(x) {
+  data.table(value = x) %>%
+    .[, .N, by = value] %>%
+    .[N == max(N)] %>%
+    .$value %>%
+    as.numeric() %>% 
+    `if`(length(.)==1,.,
+         max(.))
+}
+
+annot. <- function(num_vec)
+  num_vec %>% 
+  paste0('<sup><sub><br>',.,'</sub></sup>')
+  # {ifelse(.<0, strrep("<sup><sub>*</sub></sup>",abs(.)), strrep("<sup><sub>#</sub></sup>",abs(.)))}
+
+heatmapGrid. <- function(input) {
+  var.. <-
+    selectedVarname(input)
+  dta <-
+    filteredDATA(input$SelectedIndics,input) %>%
+    .[!is.na(.[[var..]])] %>% 
+    .[, .SD[time==max(time)], by=.(geo,JAF_KEY)]
+  dta_with_ordered_indics <-
+    copy(dta) %>% 
+    .[, geo := as.character(geo)] %>% 
+    .[geo %in% input$SelectedGeos] %>% 
+    merge(DATA$JAF_SCORES %>% 
+            .[,.(JAF_KEY,Description)] %>% 
+            unique() %>% 
+            .[, JAF_KEY__Description :=
+                paste0('[',JAF_KEY,'] ',Description)],
+          by='JAF_KEY') %>% 
+    # .[, JAF_KEY__Description := ifelse(time==max(time),
+    #                                    paste0(JAF_KEY__Description,' '),
+    #                                    paste0(JAF_KEY__Description,', ',time,' '))] %>% 
+    .[, JAF_KEY := factor(JAF_KEY__Description,
+                          levels=.[,.(JAF_KEY__Description,JAF_KEY)] %>% 
+                            unique() %>% 
+                            order_by_JAF_KEY() %>% 
+                            .$JAF_KEY__Description,
+                          ordered=TRUE)] %>% 
+    .[, mode := mode.(time)]
+  plot_ly(y=dta_with_ordered_indics$JAF_KEY,
+          x=dta_with_ordered_indics$geo,
+          z=dta_with_ordered_indics[[var..]],
+          colors = colorPalette,
+          text = round(dta_with_ordered_indics[[var..]],1) %>% # Add data labels
+            paste0(ifelse(dta_with_ordered_indics$time!=dta_with_ordered_indics$mode,
+                          # annot.(dta_with_ordered_indics$time-dta_with_ordered_indics$mode),
+                          annot.(dta_with_ordered_indics$time),
+                          "")),
+          texttemplate = "%{text}",
+          textfont = list(size = 8),
+          # textposition = 'outside',
+          type="heatmap",
+          # marker = list(color='#D3D3D3'),
+          # name="Selected countries",
+          height=100+22*length(unique(dta_with_ordered_indics$JAF_KEY))) %>% 
+    layout(title=paste('"Heatmap": the greener the colour, the better; the more red the colour, the worse\n',
+                       mode.(dta_with_ordered_indics$time),
+                       'unless indicated otherwise inside the plot cells'),
+           yaxis=list(title=NULL, showgrid=TRUE, gridcolor='#f5f5f5', gridwidth=1),
+           xaxis=list(title=list(text=paste0(ifScoresSelected(input, 'Score ', 'Indicator value '),
+                                             ifLevelsSelected(input, '(level)', '(change)')),
+                                 font=list(size=18))),
+           margin = list(t=60), # more space at the top for the title
+           coloraxis = list(
+             colorbar = list(
+               bordercolor = "transparent",
+               borderlinewidth = 0,
+               outlinewidth = 0
+             ))
+    ) %>%
+    renderPlotly()  
 }
 
 selectPlots <- function(input) {
@@ -545,17 +630,23 @@ ui <- fluidPage(
             }
     
     ")),
-    tags$script(HTML("
-            $(document).on('shiny:busy', function(event) {
-                $('#loading').show();
-            });
-
-            $(document).on('shiny:idle', function(event) {
-                $('#loading').hide();
-            });
-        "))
+  #   tags$script(HTML("
+  #           $(document).on('shiny:busy', function(event) {
+  #               $('#loading').show();
+  #           });
+  # 
+  #           //$(document).on('shiny:idle', function(event) {
+  #           //    $('#loading').hide();
+  #           //});
+  #           
+  # 
+  #           $(document).on('plotly_afterplot', '.js-plotly-plot', function(event) {
+  #               $('#loading').hide();
+  #           });
+  #           
+  #       "))
   ),
-  tags$div(id = "loading", class = "spinner"),
+  # tags$div(id = "loading", class = "spinner"),
   HTML(paste0('
     <div class="flex-container">
       <div class="left-text"><h1>JAF Indicators</h1></div>
@@ -651,6 +742,19 @@ server <- function(input, output, session) {
                           inputId = "SelectedGeos",
                           selected=character(0))
     }})
+  
+  # observe(input$plotReady,{
+  #   if(input$plotReady) {
+  #     removeModal()
+  #   } else {
+  #     showModal(modalDialog(
+  #       title = "Please Wait",
+  #       "Calculations in progress...",
+  #       easyClose = FALSE,
+  #       footer = NULL
+  #     ))
+  #   }
+  # })
   
   output$TheTable <- renderTable({
     DATA %>% 
