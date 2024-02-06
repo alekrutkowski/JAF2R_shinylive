@@ -421,7 +421,7 @@ linePlotGeoEU. <- function(input) {
          })
 }
 
-colorPalette <- colorRamp(c("red","white","green"))
+colorPalette <- colorRamp(c("darkred","white","green"))
 
 mode. <- function(x) {
   data.table(value = x) %>%
@@ -436,7 +436,7 @@ mode. <- function(x) {
 annot. <- function(num_vec)
   num_vec %>% 
   paste0('<sup><sub><br>',.,'</sub></sup>')
-  # {ifelse(.<0, strrep("<sup><sub>*</sub></sup>",abs(.)), strrep("<sup><sub>#</sub></sup>",abs(.)))}
+# {ifelse(.<0, strrep("<sup><sub>*</sub></sup>",abs(.)), strrep("<sup><sub>#</sub></sup>",abs(.)))}
 
 heatmapGrid. <- function(input) {
   var.. <-
@@ -499,14 +499,101 @@ heatmapGrid. <- function(input) {
     renderPlotly()  
 }
 
+renderMsg <- function(txt)
+  renderPlotly({
+    # Create a blank plot
+    p <- plot_ly() %>%
+      layout(
+        xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+        yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+        annotations = list(
+          list(
+            text = txt,
+            x = 0.5,
+            y = 0.5,
+            xref = "paper",
+            yref = "paper",
+            showarrow = FALSE,
+            font = list(
+              size = 20
+            )
+          )
+        )
+      )
+    p
+  })
+
+escapeHtml <- function(text)
+  text %>%
+  as.character() %>%
+  gsub("&", "&amp;", ., fixed = TRUE) %>%
+  gsub("<", "&lt;", ., fixed = TRUE) %>%
+  gsub(">", "&gt;", ., fixed = TRUE) %>%
+  gsub("\"", "&quot;", ., fixed = TRUE) %>%
+  gsub("'", "&#039;", ., fixed = TRUE)
+
+renderTbl <- function(input) {
+  if (input$toggle)
+    return(renderMsg('&#9888; App suspended by the user'))
+  if (length(input$SelectedIndics)==0 || length(input$SelectedGeos)==0)
+    return(renderMsg('&#9432; Please select one or more indicators and one or more countries'))
+  var.. <-
+    selectedVarname(input)
+  dt <-
+    filteredDATA(input$SelectedIndics,input) %>%
+    .[geo %in% input$SelectedGeos] %>%
+    `if`('Description' %in% colnames(.),
+         .,
+         merge(.,DATA$JAF_SCORES %>% 
+                 .[,.(JAF_KEY,Description)] %>% 
+                 .[,Description := gsub(' ,',",",Description,fixed=TRUE)] %>% 
+                 unique(),
+               by='JAF_KEY')) %>% 
+    {`if`(!identical(input$SelectedScore,'TRUE'), 
+          .[input$SelectedYears <= time],
+          .[, .SD[time==max(time)], by=.(JAF_KEY,geo)])} %>% 
+    .[, c('JAF_KEY','Description','geo','time',var..), with=FALSE] %>% 
+    .[, (var..) := round(get(var..),1)]
+  if (nrow(dt)==0)
+    return(renderMsg('&#9432; Empty table: please select a lower time-series start year or tick "show standardised scores"'))
+  dt2 <-
+    dcast(dt, JAF_KEY + Description + geo ~ time) %>% 
+    # setnames(c('JAF_KEY','Description','geo','time',var..),
+    #          c('Indicator Code','Indicator Description','Country','Year',
+    #            paste(ifelse(identical(input$SelectedScore,'TRUE'),'Score','Value'),
+    #                  ifelse(identical(input$SelectedLevel,'TRUE'),'Level','Change'))))
+    setnames(c('JAF_KEY','Description','geo'),
+             c('Indicator Code','Indicator Description','Country'))
+  plot_ly(
+    type = 'table',
+    height=800, # 100+30*max(nrow(dt2),50),
+    header = list(
+      values = names(dt2) %>% paste0('<b>',.,'</b>'),
+      # font=list(style='bold')
+      # align = c('left', rep('center', ncol(dt))),
+      # line = list(width = 1, color = 'black'),
+      fill = list(color = '#efefef')
+      # font = list(family = "Arial", size = 14, color = "white")
+    ),
+    cells = list(
+      values = t(as.matrix(unname(head(dt2,100)))) %>% ifelse(is.na(.),"",.) #,
+      # align = c('left', rep('center', ncol(dt))),
+      # line = list(color = "black", width = 1),
+      # fill = list(color = c('rgb(235, 193, 238)', 'rgba(228, 222, 249, 0.65)')),
+      # font = list(family = "Arial", size = 12, color = c("black"))
+    )) %>% 
+    {div(
+         div(if (nrow(dt2)>100) HTML('<br>Large table: only top 100 rows will be shown, but you will be able to download the full table')),
+         div(renderPlotly(.)))}
+}
+
 selectPlots <- function(input) {
-  if (input$toggle) return(renderUI(div(class="red-frame",
-                                        'App suspended by the user')))
+  if (input$toggle) return(renderMsg('&#9888; App suspended by the user'))
   i <- length(input$SelectedIndics)
   s <- identical(input$SelectedScore,'TRUE')
   g <- length(input$SelectedGeos)
   y <- input$SelectedYears < max(YEARS)
-  if (i==0 || g==0) return(NULL)
+  if (i==0 || g==0) return(renderMsg('&#9432; Please select one or more indicators and one or more countries'))
   if(i==1 && s && g==1 && !y) return(hist.(input)) # 
   if(i> 1 &&  s && g==1 && !y) return(sortedHorizBarChart.(input)) # 
   if(i==1 &&  s && g> 1 && !y) return(sortedBarChart.(input)) # 
@@ -630,23 +717,23 @@ ui <- fluidPage(
             }
     
     ")),
-  #   tags$script(HTML("
-  #           $(document).on('shiny:busy', function(event) {
-  #               $('#loading').show();
-  #           });
-  # 
-  #           //$(document).on('shiny:idle', function(event) {
-  #           //    $('#loading').hide();
-  #           //});
-  #           
-  # 
-  #           $(document).on('plotly_afterplot', '.js-plotly-plot', function(event) {
-  #               $('#loading').hide();
-  #           });
-  #           
-  #       "))
+    tags$script(HTML("
+            $(document).on('shiny:busy', function(event) {
+                $('#loading').show();
+            });
+
+            //$(document).on('shiny:idle', function(event) {
+            //    $('#loading').hide();
+            //});
+
+
+            $(document).on('plotly_afterplot', '.js-plotly-plot', function(event) {
+                $('#loading').hide();
+            });
+
+        "))
   ),
-  # tags$div(id = "loading", class = "spinner"),
+  tags$div(id = "loading", class = "spinner"),
   HTML(paste0('
     <div class="flex-container">
       <div class="left-text"><h1>JAF Indicators</h1></div>
@@ -659,7 +746,7 @@ ui <- fluidPage(
            tags$input(id = "toggle", type = "checkbox", class = "switch-input"),
            tags$label(`for` = "toggle", class = "slider round"),
   ),
-  HTML('<sub><big><sub><big><big><strong>&nbsp;A switch to <span style="color:red;">stop</span> all the calculations and pick the selections below without immediate recalculation of the output</strong></big></big></sub></big></sub>'),
+  HTML('<sub><big><sub><big><big><strong>&nbsp;A switch to <span style="color:red;">stop</span> "reactivity" i.e. stop all the calculations and pick many multiple selections below without immediate recalculation of the output</strong></big></big></sub></big></sub>'),
   # textOutput('tmp'),
   selectInput(
     inputId = "SelectedIndics",
@@ -706,7 +793,7 @@ ui <- fluidPage(
     tabPanel("Chart",
              uiOutput("ThePlotPlace")),
     tabPanel("Table",
-             tableOutput("TheTable"))
+             uiOutput("TheTable"))
   )
   
 )
@@ -756,10 +843,8 @@ server <- function(input, output, session) {
   #   }
   # })
   
-  output$TheTable <- renderTable({
-    DATA %>% 
-      .$JAF_SCORES %>% 
-      head(20)
+  output$TheTable <- renderUI({
+    renderTbl(input)
   })
   
   output$ThePlotPlace <- renderUI({
