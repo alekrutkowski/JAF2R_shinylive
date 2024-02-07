@@ -3,7 +3,7 @@ library(plotly)
 library(data.table)
 library(magrittr)
 library(kit)
-library(openxlsx2)
+library(openxlsx)
 # dev mode: setwd('app')
 
 IS_SHINYLIVE <- 
@@ -502,25 +502,25 @@ heatmapGrid. <- function(input) {
 renderMsg <- function(txt)
   renderPlotly({
     # Create a blank plot
-    p <- plot_ly() %>%
+    plot_ly(height=100) %>%
       layout(
         xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
         yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
         annotations = list(
           list(
             text = txt,
-            x = 0.5,
-            y = 0.5,
+            x = 0,
+            y = 0,
             xref = "paper",
             yref = "paper",
             showarrow = FALSE,
             font = list(
-              size = 20
+              size = 14
             )
           )
         )
-      )
-    p
+      ) %>% 
+      config(displaylogo = FALSE, modeBarButtonsToRemove = c("sendDataToCloud", "toImage", "select2d", "lasso2d", "resetScale2d"), showLink = FALSE)
   })
 
 escapeHtml <- function(text)
@@ -533,9 +533,15 @@ escapeHtml <- function(text)
   gsub("'", "&#039;", ., fixed = TRUE)
 
 renderTbl <- function(input) {
+  i <- length(input$SelectedIndics)
+  s <- identical(input$SelectedScore,'TRUE')
+  g <- length(input$SelectedGeos)
+  y <- input$SelectedYears < max(YEARS)
   if (input$toggle)
     return(renderMsg('&#9888; App suspended by the user'))
-  if (length(input$SelectedIndics)==0 || length(input$SelectedGeos)==0)
+  if (i==0 || g==0 ||
+      i==1 && grepl('Remove all the selected',input$SelectedIndics) ||
+      g==1 && grepl('Remove all the selected',input$SelectedGeos)) 
     return(renderMsg('&#9432; Please select one or more indicators and one or more countries'))
   var.. <-
     selectedVarname(input)
@@ -582,18 +588,46 @@ renderTbl <- function(input) {
       # fill = list(color = c('rgb(235, 193, 238)', 'rgba(228, 222, 249, 0.65)')),
       # font = list(family = "Arial", size = 12, color = c("black"))
     )) %>% 
+    layout(title=paste(ifelse(identical(input$SelectedScore,'TRUE'),'Score','Value'),
+                       ifelse(identical(input$SelectedLevel,'TRUE'),'Level','Change'))) %>% 
+    config(displaylogo = FALSE, modeBarButtonsToRemove = c("sendDataToCloud", "toImage", "select2d", "lasso2d", "resetScale2d"), showLink = FALSE) %>% 
     {div(
-         div(if (nrow(dt2)>100) HTML('<br>Large table: only top 100 rows will be shown, but you will be able to download the full table')),
-         div(renderPlotly(.)))}
+      div(if (nrow(dt2)>100) HTML('<br>&#9888; Large table: only top 100 rows will be shown, but you will be able to download the full table')),
+      div(renderPlotly(.)))}
+}
+
+dataForExcel. <- function(input) {
+  var.. <-
+    selectedVarname(input)
+  filteredDATA(input$SelectedIndics,input) %>%
+    .[geo %in% input$SelectedGeos] %>%
+    `if`('Description' %in% colnames(.),
+         .,
+         merge(.,DATA$JAF_SCORES %>% 
+                 .[,.(JAF_KEY,Description)] %>% 
+                 .[,Description := gsub(' ,',",",Description,fixed=TRUE)] %>% 
+                 unique(),
+               by='JAF_KEY')) %>% 
+    {`if`(!identical(input$SelectedScore,'TRUE'), 
+          .[input$SelectedYears <= time],
+          .[, .SD[time==max(time)], by=.(JAF_KEY,geo)])} %>% 
+    .[, c('JAF_KEY','Description','geo','time',var..), with=FALSE] %>% 
+    .[, (var..) := round(get(var..),1)] %>% 
+    dcast(JAF_KEY + Description + geo ~ time) %>% 
+    setnames(c('JAF_KEY','Description','geo'),
+             c('Indicator Code','Indicator Description','Country'))
 }
 
 selectPlots <- function(input) {
-  if (input$toggle) return(renderMsg('&#9888; App suspended by the user'))
   i <- length(input$SelectedIndics)
   s <- identical(input$SelectedScore,'TRUE')
   g <- length(input$SelectedGeos)
   y <- input$SelectedYears < max(YEARS)
-  if (i==0 || g==0) return(renderMsg('&#9432; Please select one or more indicators and one or more countries'))
+  if (input$toggle) return(renderMsg('&#9888; App suspended by the user'))
+  if (i==0 || g==0 ||
+      i==1 && grepl('Remove all the selected',input$SelectedIndics) ||
+      g==1 && grepl('Remove all the selected',input$SelectedGeos) 
+  ) return(renderMsg('&#9432; Please select one or more indicators and one or more countries'))
   if(i==1 && s && g==1 && !y) return(hist.(input)) # 
   if(i> 1 &&  s && g==1 && !y) return(sortedHorizBarChart.(input)) # 
   if(i==1 &&  s && g> 1 && !y) return(sortedBarChart.(input)) # 
@@ -718,18 +752,43 @@ ui <- fluidPage(
     
     ")),
     tags$script(HTML("
+            var isShinyBusy = false;         
+            
             $(document).on('shiny:busy', function(event) {
+                isShinyBusy = true;
                 $('#loading').show();
             });
 
-            //$(document).on('shiny:idle', function(event) {
-            //    $('#loading').hide();
-            //});
+            $(document).on('shiny:idle', function(event) {
+                isShinyBusy = false;
+            });
 
 
             $(document).on('plotly_afterplot', '.js-plotly-plot', function(event) {
+                isShinyBusy = false;
                 $('#loading').hide();
             });
+            
+            function EmptyTable() {
+                // Get all SVG elements in the document
+                const svgs = document.querySelectorAll('svg');
+                for (const svg of svgs) {
+                    // Find all <text> elements within the current SVG
+                    const textElements = svg.querySelectorAll('text');
+                    for (const textElement of textElements) {
+                        if (textElement.textContent.includes('Empty table')) {
+                            return true; // Return true as soon as we find a match
+                        }
+                    }
+                }
+                return false;
+            }
+            
+      $(document).on('shiny:connected', function(e) {
+        Shiny.addCustomMessageHandler('custom_message', function(message) {
+          $('#loading').hide();
+        });
+      });
 
         "))
   ),
@@ -793,16 +852,15 @@ ui <- fluidPage(
     tabPanel("Chart",
              uiOutput("ThePlotPlace")),
     tabPanel("Table",
+             conditionalPanel('input.SelectedIndics.length>0 && input.SelectedGeos.length>0 && !EmptyTable() && !isShinyBusy',
+                              br(),
+                              downloadLink("TheDownloadLink", "\u2B73 Download the selected data as Excel file")),
              uiOutput("TheTable"))
   )
   
 )
 
 server <- function(input, output, session) {
-  
-  # debouncedInput <- reactive({
-  #   input
-  # }) %>% debounce(2000) # 2 second delay
   
   output$tmp <- renderText(input$toggle)
   
@@ -830,27 +888,41 @@ server <- function(input, output, session) {
                           selected=character(0))
     }})
   
-  # observe(input$plotReady,{
-  #   if(input$plotReady) {
-  #     removeModal()
-  #   } else {
-  #     showModal(modalDialog(
-  #       title = "Please Wait",
-  #       "Calculations in progress...",
-  #       easyClose = FALSE,
-  #       footer = NULL
-  #     ))
-  #   }
-  # })
-  
   output$TheTable <- renderUI({
     renderTbl(input)
   })
   
   output$ThePlotPlace <- renderUI({
-    # TODO add plot type dispatch function based on the length of selected inputs (countries, indics, years)
     selectPlots(input)
   })
+  
+  output$TheDownloadLink <- downloadHandler(
+    filename = function() "Custom JAF extraction.xlsx",
+    content = function(filename) {
+      dataForExcel.(input) %>% 
+        openxlsx::write.xlsx(
+          filename,
+          creator='DG EMPL F4 Statistical Team',
+          sheetName=
+            paste(ifelse(identical(input$SelectedScore,'TRUE'),'Score','Value'),
+                  ifelse(identical(input$SelectedLevel,'TRUE'),'Level','Change')),
+          # Sys.time() %>% 
+          # paste('Downloaded',.) %>% 
+          # substr(1,30) %>% 
+          # gsub(':','.',.,fixed=TRUE),
+          zoom=75,
+          # header=TRUE,
+          colWidths='auto', # c(15,30,rep.int(10,ncol(.)-2)),
+          # col_widths=sapply(.,. %>% as.character %>% 
+          #                     nchar %>% max(na.rm=TRUE)),
+          # first_active_row=2,
+          # first_active_col=4
+          firstRow=TRUE,
+          firstActiveCol=4
+        )
+      session$sendCustomMessage("custom_message",list(message=TRUE))
+    }
+  )
   
 }
 
