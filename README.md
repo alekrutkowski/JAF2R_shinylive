@@ -1,6 +1,8 @@
 ## Working prototypes
 
-### Shiny versions – work on a server, load relatively fast:
+### Shiny versions
+
+#### ⓘ Work on a server, load relatively fast:
 
 - Always on:
 
@@ -10,7 +12,9 @@ https://shiny-r.tk/JAF2R_shinylive/app/
 
 https://jaf2r.shinyapps.io/JAF2R/
 
-### ShinyLive/WebR (WASM) versions – work purely in your browser, take several seconds to load, but then seem to work fine:
+### ShinyLive/WebR (WASM) "serverless" versions
+
+#### ⓘ Work purely in your browser, take several seconds to load, but then seem to work fine:
 
 - Slow to load:
 
