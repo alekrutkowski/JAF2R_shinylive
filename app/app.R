@@ -752,20 +752,20 @@ ui <- fluidPage(
     
     ")),
     tags$script(HTML("
-            var isShinyBusy = false;         
+            //var isShinyBusy = false;         
             
             $(document).on('shiny:busy', function(event) {
-                isShinyBusy = true;
+                //isShinyBusy = true;
                 $('#loading').show();
             });
 
-            $(document).on('shiny:idle', function(event) {
-                isShinyBusy = false;
-            });
+           // $(document).on('shiny:idle', function(event) {
+          //      isShinyBusy = false;
+          //  });
 
 
             $(document).on('plotly_afterplot', '.js-plotly-plot', function(event) {
-                isShinyBusy = false;
+                //isShinyBusy = false;
                 $('#loading').hide();
             });
             
@@ -784,11 +784,32 @@ ui <- fluidPage(
                 return false;
             }
             
-      $(document).on('shiny:connected', function(e) {
-        Shiny.addCustomMessageHandler('custom_message', function(message) {
-          $('#loading').hide();
-        });
-      });
+            function isLoadingSpinnerVisible() {
+              const elem = document.getElementById('loading');
+              // Check if the element exists
+              if (!elem) {
+                return false; // Element does not exist
+              }
+              // Get computed styles of the element
+              const style = window.getComputedStyle(elem);
+              // Check if the element is not hidden
+              return style.display !== 'none' && style.visibility !== 'hidden';
+            }
+          
+            function hideLoadingSpinnerFun() {
+                var element = document.getElementById('loading');
+                if (element) {
+                    $('#loading').hide();
+                }
+            }
+            setTimeout(hideLoadingSpinnerFun, 30000);
+
+            
+            $(document).on('shiny:connected', function(e) {
+              Shiny.addCustomMessageHandler('hideLoadingSpinner', function(message) {
+                $('#loading').hide();
+              });
+            });
 
         "))
   ),
@@ -852,9 +873,10 @@ ui <- fluidPage(
     tabPanel("Chart",
              uiOutput("ThePlotPlace")),
     tabPanel("Table",
-             conditionalPanel('input.SelectedIndics.length>0 && input.SelectedGeos.length>0 && !EmptyTable() && !isShinyBusy',
+             conditionalPanel('input.SelectedIndics.length>0 && input.SelectedGeos.length>0 && (!EmptyTable() || !isLoadingSpinnerVisible())',
                               br(),
                               downloadLink("TheDownloadLink", "\u2B73 Download the selected data as Excel file")),
+             br(),
              uiOutput("TheTable"))
   )
   
@@ -897,30 +919,40 @@ server <- function(input, output, session) {
   })
   
   output$TheDownloadLink <- downloadHandler(
-    filename = function() "Custom JAF extraction.xlsx",
+    filename = function() 
+      paste0("Custom JAF extraction ",
+             Sys.time() %>% gsub(':',".",.,fixed=TRUE) %>% substr(1,19),
+             ".xlsx"),
     content = function(filename) {
-      dataForExcel.(input) %>% 
-        openxlsx::write.xlsx(
-          filename,
-          creator='DG EMPL F4 Statistical Team',
-          sheetName=
-            paste(ifelse(identical(input$SelectedScore,'TRUE'),'Score','Value'),
-                  ifelse(identical(input$SelectedLevel,'TRUE'),'Level','Change')),
-          # Sys.time() %>% 
-          # paste('Downloaded',.) %>% 
-          # substr(1,30) %>% 
-          # gsub(':','.',.,fixed=TRUE),
-          zoom=75,
-          # header=TRUE,
-          colWidths='auto', # c(15,30,rep.int(10,ncol(.)-2)),
-          # col_widths=sapply(.,. %>% as.character %>% 
-          #                     nchar %>% max(na.rm=TRUE)),
-          # first_active_row=2,
-          # first_active_col=4
-          firstRow=TRUE,
-          firstActiveCol=4
-        )
-      session$sendCustomMessage("custom_message",list(message=TRUE))
+      dta <-
+        dataForExcel.(input)
+      col_nums <-
+        seq_along(colnames(dta))
+      wb <- 
+        createWorkbook(creator='DG EMPL F4 Statistical Team')
+      addWorksheet(wb, zoom=75,
+                   sheetName=
+                     paste('JAF',
+                           ifelse(identical(input$SelectedScore,'TRUE'),'Score','Value'),
+                           ifelse(identical(input$SelectedLevel,'TRUE'),'Level','Change')))
+      writeData(wb, 1, startRow = 1, startCol = 1,
+                x=paste(ifelse(identical(input$SelectedScore,'TRUE'),
+                               'Standardised Indicator Score (not Value)',
+                               'Actual Indicator Value (not Score)'),
+                        ifelse(identical(input$SelectedLevel,'TRUE'),
+                               '\u2014 Level (not Change)','\u2014 Change (not Level)')))
+      writeData(wb, 1, startRow = 2, startCol = 1,
+                x = dta)
+      addStyle(wb, 1, style = createStyle(textDecoration = "bold"), 
+               rows=1:2, cols=col_nums, gridExpand=TRUE)
+      addStyle(wb, 1, style = createStyle(halign = "right"), stack=TRUE,
+               rows=2, cols=col_nums %>% setdiff(1:3), gridExpand=TRUE)
+      freezePane(wb,1, firstActiveRow = 3, firstActiveCol = 4)
+      setColWidths(wb,1, cols=col_nums,
+                   widths=c(15, .82*max(nchar(dta$`Indicator Description`)), 10,
+                            rep.int(6,length(dta)-3)))
+      saveWorkbook(wb, filename, overwrite = TRUE)
+      session$sendCustomMessage("hideLoadingSpinner",list(message=TRUE))
     }
   )
   
