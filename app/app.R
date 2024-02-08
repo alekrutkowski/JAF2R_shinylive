@@ -9,11 +9,14 @@ library(openxlsx)
 IS_SHINYLIVE <- 
   grepl("wasm",R.Version()$arch)
 
+MY_MACHINE <-
+  Sys.getenv('USER')=='alek' || Sys.getenv('username')=='rutkoal'
+
 `%not in%` <- Negate(`%in%`)
 
 DATA <- 
   'data.Rds' %>% 
-  {`if`(IS_SHINYLIVE,
+  {`if`(IS_SHINYLIVE || !MY_MACHINE,
         (.) %T>% 
           download.file(
             paste0('https://raw.githubusercontent.com/alekrutkowski/JAF2R_shinylive/main/data/',
