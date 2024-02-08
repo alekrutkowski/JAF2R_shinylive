@@ -435,7 +435,7 @@ mode. <- function(x) {
 
 annot. <- function(num_vec)
   num_vec %>% 
-  paste0('<sup><sub><br>',.,'</sub></sup>')
+  paste0('<br><sup>',.,'</sup>')
 # {ifelse(.<0, strrep("<sup><sub>*</sub></sup>",abs(.)), strrep("<sup><sub>#</sub></sup>",abs(.)))}
 
 heatmapGrid. <- function(input) {
@@ -476,11 +476,19 @@ heatmapGrid. <- function(input) {
                           "")),
           texttemplate = "%{text}",
           textfont = list(size = 8),
-          # textposition = 'outside',
           type="heatmap",
-          # marker = list(color='#D3D3D3'),
-          # name="Selected countries",
-          height=100+22*length(unique(dta_with_ordered_indics$JAF_KEY))) %>% 
+          colorbar = list(
+            len = 0.7, # Length of the color bar (0 to 1, fraction of plot dimension)
+            thickness = 20, # Thickness of the color bar
+            y=-6.92/(length(input$SelectedIndics)+2.58), 
+            yanchor = "bottom", # Anchor point
+            orientation = 'h' # Horizontal orientation
+          ),
+          height=350+22*length(unique(dta_with_ordered_indics$JAF_KEY))) %>% 
+    add_trace(
+      hoverinfo = 'text',
+      hovertemplate = "%{x}<br>%{y}<br>%{text}<extra></extra>"
+    ) %>% 
     layout(title=paste('"Heatmap": the greener the colour, the better; the more red the colour, the worse\n',
                        mode.(dta_with_ordered_indics$time),
                        'unless indicated otherwise inside the plot cells'),
@@ -488,7 +496,7 @@ heatmapGrid. <- function(input) {
            xaxis=list(title=list(text=paste0(ifScoresSelected(input, 'Score ', 'Indicator value '),
                                              ifLevelsSelected(input, '(level)', '(change)')),
                                  font=list(size=18))),
-           margin = list(t=60), # more space at the top for the title
+           margin = list(t=100,b=200), # more space at the top for the title
            coloraxis = list(
              colorbar = list(
                bordercolor = "transparent",
@@ -522,15 +530,6 @@ renderMsg <- function(txt)
       ) %>% 
       config(displaylogo = FALSE, modeBarButtonsToRemove = c("sendDataToCloud", "toImage", "select2d", "lasso2d", "resetScale2d"), showLink = FALSE)
   })
-
-escapeHtml <- function(text)
-  text %>%
-  as.character() %>%
-  gsub("&", "&amp;", ., fixed = TRUE) %>%
-  gsub("<", "&lt;", ., fixed = TRUE) %>%
-  gsub(">", "&gt;", ., fixed = TRUE) %>%
-  gsub("\"", "&quot;", ., fixed = TRUE) %>%
-  gsub("'", "&#039;", ., fixed = TRUE)
 
 renderTbl <- function(input) {
   i <- length(input$SelectedIndics)
@@ -754,9 +753,17 @@ ui <- fluidPage(
     tags$script(HTML("
             //var isShinyBusy = false;         
             
+            function hideLoadingSpinnerFun() {
+                var element = document.getElementById('loading');
+                if (element) {
+                    $('#loading').hide();
+                }
+            }
+            
             $(document).on('shiny:busy', function(event) {
                 //isShinyBusy = true;
                 $('#loading').show();
+                //setTimeout(hideLoadingSpinnerFun, 60000);
             });
 
            // $(document).on('shiny:idle', function(event) {
@@ -795,15 +802,6 @@ ui <- fluidPage(
               // Check if the element is not hidden
               return style.display !== 'none' && style.visibility !== 'hidden';
             }
-          
-            function hideLoadingSpinnerFun() {
-                var element = document.getElementById('loading');
-                if (element) {
-                    $('#loading').hide();
-                }
-            }
-            setTimeout(hideLoadingSpinnerFun, 30000);
-
             
             $(document).on('shiny:connected', function(e) {
               Shiny.addCustomMessageHandler('hideLoadingSpinner', function(message) {
