@@ -12,6 +12,10 @@ https://shiny-r.tk/JAF2R_shinylive/app/
 
 https://jaf2r.shinyapps.io/JAF2R/
 
+- May have to be "woken up" and shows the HuggingFace bar at the very top (ignore it) and becomes quickly inactive (greyed out) if not used:
+
+https://huggingface.co/spaces/alekrutkowski/JAF2R
+
 ### ShinyLive/WebR (WASM) "serverless" versions
 
 #### ⓘ Work purely in your browser, take several seconds to load, but then seem to work fine:

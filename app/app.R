@@ -15,16 +15,20 @@ MY_MACHINE <-
 `%not in%` <- Negate(`%in%`)
 
 DATA <- 
-  'data.Rds' %>% 
-  {`if`(IS_SHINYLIVE || !MY_MACHINE,
-        (.) %T>% 
-          download.file(
-            paste0('https://raw.githubusercontent.com/alekrutkowski/JAF2R_shinylive/main/data/',
-                   .),
-            .),
-        paste0('../data/',.)
-  )} %>% 
-  readRDS()
+  tryCatch(
+    readRDS('data.Rds'), # on HuggingFace
+    error=function(e) # otherwise
+      'data.Rds' %>% 
+      {`if`(IS_SHINYLIVE || !MY_MACHINE,
+            (.) %T>% 
+              download.file(
+                paste0('https://raw.githubusercontent.com/alekrutkowski/JAF2R_shinylive/main/data/',
+                       .),
+                .),
+            paste0('../data/',.)
+      )} %>% 
+      readRDS()
+  )
 
 `JAF_KEY->PA_string` <- function(JAF_KEY)
   sub("PA(.*?)\\.(C|O|S).*",'\\1',JAF_KEY) # e.g. PA11c.S1.T -> 11c ; PA7.2.S2.F -> 7.2
