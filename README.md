@@ -6,7 +6,7 @@
 
 - Always on:
 
-https://shiny-r.tk/JAF2R_shinylive/app/
+https://shiny-r.dev/JAF2R_shinylive/app
 
 - May have to be "woken up":
 
