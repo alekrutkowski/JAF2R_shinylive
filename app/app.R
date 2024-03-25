@@ -16,7 +16,7 @@ MY_MACHINE <-
 
 DATA <- 
   tryCatch(
-    readRDS('data.Rds'), # on HuggingFace
+    suppressWarnings(readRDS('data.Rds')), # on HuggingFace
     error=function(e) # otherwise
       'data.Rds' %>% 
       {`if`(IS_SHINYLIVE || !MY_MACHINE,
@@ -361,7 +361,8 @@ basicLinePlot. <- function(input) {
            ) %>% 
              layout(title=paste0(names(INDICATORS)[INDICATORS==single_indic],
                                  ifelse(length(input$SelectedGeos)==1,
-                                        paste0(', ',names(GEOS)[GEOS==input$SelectedGeos]),"")),
+                                        paste0(', ',names(GEOS)[GEOS==input$SelectedGeos]),"")) %>% 
+                      strwrap(60) %>% paste(collapse='<br>'),
                     xaxis=list(title=NULL,
                                dtick = 1, # Set gridlines at every integer
                                tickmode = "linear",
@@ -371,7 +372,8 @@ basicLinePlot. <- function(input) {
                                           font=list(size=18))),
                     margin = list(t=60) # more space at the top for the title
              ) %>%
-             renderPlotly()  
+             renderPlotly() %>% 
+             span(style="width:50%;",.)  
          })
 }
 
@@ -412,7 +414,8 @@ linePlotGeoEU. <- function(input) {
            ) %>% 
              layout(title=paste0(names(INDICATORS)[INDICATORS==single_indic],
                                  ifelse(length(input$SelectedGeos)==1,
-                                        paste0(', ',names(GEOS)[GEOS==input$SelectedGeos]),"")),
+                                        paste0(', ',names(GEOS)[GEOS==input$SelectedGeos]),"")) %>% 
+                      strwrap(60) %>% paste(collapse='<br>'),
                     xaxis=list(title=NULL,
                                dtick = 1, # Set gridlines at every integer
                                tickmode = "linear",
@@ -424,11 +427,12 @@ linePlotGeoEU. <- function(input) {
                     legend = list(font = list(size = 8))
              ) %>%
              renderPlotly() %>% 
-             div(style="height:710px;",.) # needed to avoid the vertical truncations in a list of plots
+             span(style="height:710px;width:50%;",.) # 710px needed to avoid the vertical truncations in a list of plots
          })
 }
 
-colorPalette <- colorRamp(c("darkred","white","green"))
+colorPalette <- 
+  colorRamp(c("darkred","white","green"))
 
 mode. <- function(x) {
   data.table(value = x) %>%
@@ -465,6 +469,10 @@ heatmapGrid. <- function(input) {
     # .[, JAF_KEY__Description := ifelse(time==max(time),
     #                                    paste0(JAF_KEY__Description,' '),
     #                                    paste0(JAF_KEY__Description,', ',time,' '))] %>% 
+    ### TODO -- correct
+    # .[,JAF_KEY__Description := JAF_KEY__Description %>% 
+    #     strwrap(60) %>% paste(collapse='<br>')
+    #   ,by=.I] %>% 
     .[, JAF_KEY := factor(JAF_KEY__Description,
                           levels=.[,.(JAF_KEY__Description,JAF_KEY)] %>% 
                             unique() %>% 
@@ -634,7 +642,7 @@ selectPlots <- function(input) {
       i==1 && grepl('Remove all the selected',input$SelectedIndics) ||
       g==1 && grepl('Remove all the selected',input$SelectedGeos) 
   ) return(renderMsg('&#9432; Please select one or more indicators and one or more countries'))
-  if(i==1 && s && g==1 && !y) return(hist.(input)) # 
+  if(i==1 &&  s && g==1 && !y) return(hist.(input)) # 
   if(i> 1 &&  s && g==1 && !y) return(sortedHorizBarChart.(input)) # 
   if(i==1 &&  s && g> 1 && !y) return(sortedBarChart.(input)) # 
   if(i> 1 &&  s && g> 1 && !y) return(heatmapGrid.(input)) # 
@@ -915,12 +923,23 @@ server <- function(input, output, session) {
                           selected=character(0))
     }})
   
+  observe({
+    input$SelectedScore  %>% {
+      if (!identical(.,'TRUE'))
+        updateSelectInput(session,
+                          inputId = "SelectedIndics",
+                          selected=grep('_popweighted_score',
+                                        input$SelectedIndics,
+                                        value=TRUE,invert=TRUE))
+    }})
+  
   output$TheTable <- renderUI({
     renderTbl(input)
   })
   
   output$ThePlotPlace <- renderUI({
-    selectPlots(input)
+    div(style="display: flex; flex-wrap: wrap;",
+        selectPlots(input))
   })
   
   output$TheDownloadLink <- downloadHandler(
