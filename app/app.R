@@ -833,7 +833,7 @@ ui <- fluidPage(
   HTML(paste0('
     <div class="flex-container">
       <div class="left-text"><h1>JAF Indicators</h1></div>
-      <div style="padding-top: 28px;"><a href="Plot_Selection_Logic.html" target="_blank">&#9432; Plot type selection logic explained</a></div>
+      <div style="padding-top: 28px;"><a href="https://htmlpreview.github.io/?https://raw.githubusercontent.com/alekrutkowski/JAF2R_shinylive/main/www/Plot_Selection_Logic.html" target="_blank">&#9432; Plot type selection logic explained</a></div>
       <div class="right-text" style="padding-top: 20px;">',
     ifelse(IS_SHINYLIVE,link('https://shinylive.io/r/examples/','Shinylive'),link('https://shiny.posit.co/','Shiny')),'
       <img src="https://raw.githubusercontent.com/alekrutkowski/JAF2R/main/JAF2R_logo_v3.png" alt="JAF2R project logo" height="40"/>
