@@ -77,17 +77,23 @@ Main_Indicators_Codes <-
 #   .[,PA := JAF_KEY %>% `JAF_KEY->PA_string`()] %>% 
 #   split(by='PA', keep.by=FALSE)
 
-INDICATORS <-
+AllIndics <-
   DATA$JAF_SCORES %>% 
   .[,.(JAF_KEY,Description)] %>% 
   unique() %>% 
   order_by_JAF_KEY() %>% 
   .[, JAF_KEY__Description :=
       paste0('[',JAF_KEY,'] ',Description %>% gsub(' ,',",",.,fixed=TRUE))] %>% 
-  {set_names(.$JAF_KEY,
-             .$JAF_KEY__Description)} %>% # key/name = '[JAF_KEY] Description', value = 'JAF_KEY'
-  c('\u2295 Select all Main Indicators (can be slow!)',
-    '\u2296 Remove all the selected indicators',
+  {set_names(.$JAF_KEY, # key/name = '[JAF_KEY] Description', value = 'JAF_KEY'
+             .$JAF_KEY__Description %>% 
+               sub(', NA',"",.,fixed=TRUE) %>% # correcting empty units
+               sub(' ,',",",.,fixed=TRUE))} # correcting typos
+
+INDICATORS <-
+  AllIndics %>% 
+  c('\u2296 Remove all the selected indicators',
+    '\u2295 Select all Main Indicators (can be slow!)',
+    (.) %>% `JAF_KEY->PA_string` %>% unique %>% paste('\u2295 Select all Policy Area',.,'Indicators'),
     .)
 
 # filteredSelectedIndics <- function(SelectedIndics)
@@ -473,9 +479,9 @@ heatmapGrid. <- function(input) {
     #                                    paste0(JAF_KEY__Description,' '),
     #                                    paste0(JAF_KEY__Description,', ',time,' '))] %>% 
     ### TODO -- correct
-    # .[,JAF_KEY__Description := JAF_KEY__Description %>% 
+    # .[,JAF_KEY__Description := JAF_KEY__Description %>%
     #     strwrap(60) %>% paste(collapse='<br>')
-    #   ,by=.I] %>% 
+    #   ,by=.I] %>%
     .[, JAF_KEY := factor(JAF_KEY__Description,
                           levels=.[,.(JAF_KEY__Description,JAF_KEY)] %>% 
                             unique() %>% 
@@ -671,6 +677,8 @@ kbd_info <-
 ui <- fluidPage(
   tags$head(
     tags$style(HTML("
+    .selectize-dropdown-content {max-height: 400px; }
+    
     .flex-container {
       display: flex;
       justify-content: space-between;
@@ -855,6 +863,8 @@ ui <- fluidPage(
     multiple=TRUE,
     width = "100%"
   ),
+  # actionButton('SelectAllIndics','Select All',icon('check')),
+  # actionButton('SelectAllIndics','Select Other',icon('check')),
   selectInput(
     inputId = "SelectedGeos",
     label = HTML("<strong><big><big>&#x1F310;</big></big> Select countries or country aggregates,",kbd_info,'</strong>'),
@@ -878,7 +888,20 @@ ui <- fluidPage(
     )),
     column(4,sliderInput(
       inputId = "SelectedYears",
-      label = strong("Select a start year for time series of values (if you want to see a longer period, but only the available years will be displayed)."),
+      label = div(strong("Select a start year for time series of values (if you want to see a longer period, but only the available years will be displayed)."),
+                  tags$span(
+                    style = "position: relative; display: inline-block; font-weight: normal;",
+                    tags$span(
+                      HTML("&#9432;"),
+                      tags$span(
+                        "This setting is ignored (irrelevant) for scores",
+                        style = "visibility: hidden; width: 100px; height: 100px; background-color: #3277a8; color: #fff; text-align: left; border-radius: 6px; padding: 8px 0; position: absolute; z-index: 10; bottom: 125%; left: 50%; margin-left: -110px; opacity: 0; transition: opacity 0.3s; position: absolute; top: 100%; left: 50%; margin-left: -5px; border-width: 5px; border-style: solid; border-color: #3277a8 transparent transparent transparent;"
+                      ),
+                      onmouseover = "$(this).children().css({'visibility':'visible', 'opacity':'1'});",
+                      onmouseout = "$(this).children().css({'visibility':'hidden', 'opacity':'0'});"
+                    )
+                  )
+      ),
       min = min(YEARS),
       max = max(YEARS),
       ticks=FALSE,
@@ -910,6 +933,16 @@ server <- function(input, output, session) {
         updateSelectInput(session,
                           inputId = "SelectedIndics",
                           selected=Main_Indicators_Codes)
+      if(!is.null(.) && any(grepl('Select all Policy Area',.)))
+        updateSelectInput(session,
+                          inputId = "SelectedIndics",
+                          selected = print(.) %>% 
+                            grep('Select all Policy Area',.,value=TRUE) %>%
+                            sub('Select all Policy Area (.+) Indicators','\\1',.) %>%
+                            paste0('PA',.,'.') %>%
+                            gsub('.','\\.',.,fixed=TRUE) %>% 
+                            gsub("[^\x01-\x7F]|\\s+", "", .) %>% # Remove non-ASCII characters like \u2295 and white space
+                            grep(AllIndics, value=TRUE))
       if (!is.null(.) && '\u2296 Remove all the selected indicators' %in% .)
         updateSelectInput(session,
                           inputId = "SelectedIndics",
