@@ -619,27 +619,33 @@ renderTbl <- function(input) {
       div(renderPlotly(.)))}
 }
 
-dataForExcel. <- function(input) {
-  var.. <-
-    selectedVarname(input)
-  filteredDATA(input$SelectedIndics,input) %>%
-    .[geo %in% input$SelectedGeos] %>%
-    `if`('Description' %in% colnames(.),
-         .,
-         merge(.,DATA$JAF_SCORES %>% 
-                 .[,.(JAF_KEY,Description)] %>% 
-                 .[,Description := gsub(' ,',",",Description,fixed=TRUE)] %>% 
-                 unique(),
-               by='JAF_KEY')) %>% 
-    {`if`(!identical(input$SelectedScore,'TRUE'), 
-          .[input$SelectedYears <= time],
-          .[, .SD[time==max(time)], by=.(JAF_KEY,geo)])} %>% 
-    .[, c('JAF_KEY','Description','geo','time',var..), with=FALSE] %>% 
-    .[, (var..) := round(get(var..),1)] %>% 
-    dcast(JAF_KEY + Description + geo ~ time) %>% 
-    setnames(c('JAF_KEY','Description','geo'),
-             c('Indicator Code','Indicator Description','Country'))
-}
+dataForExcel. <- function(input) 
+  list('Value Levels (selected years)'=
+         DATA$JAF_GRAND_TABLE_reduced %>% 
+         .[JAF_KEY %in% input$SelectedIndics & geo %in% input$SelectedGeos &
+             input$SelectedYears <= time,
+           .(JAF_KEY,geo,time,value_,all_flags)],
+       'Value Changes (selected years)'=
+         DATA$JAF_GRAND_TABLE_reduced %>% 
+         .[JAF_KEY %in% input$SelectedIndics & geo %in% input$SelectedGeos &
+             input$SelectedYears <= time,
+           .(JAF_KEY,geo,time,value_change,all_flags)],
+       'Score Levels (latest year)'=
+         DATA$JAF_SCORES %>% 
+         .[JAF_KEY %in% input$SelectedIndics & geo %in% input$SelectedGeos,
+           .(JAF_KEY,geo,time,score_latest_value,flags_)],
+       'Score Changes (latest year)'=
+         DATA$JAF_SCORES %>% 
+         .[JAF_KEY %in% input$SelectedIndics & geo %in% input$SelectedGeos,
+           .(JAF_KEY,geo,time,score_change,flags_)]) %>% 
+  lapply(\(x) `if`(nrow(x)>0,
+                     merge(x, DATA$JAF_NAMES_DESCRIPTIONS[,.(JAF_KEY,name)] %>% 
+                             order_by_JAF_KEY() %>% 
+                             .[, n := .I],
+                           by='JAF_KEY') %>% 
+                     setorder(n,geo,time) %>% 
+                     .[, n := NULL],
+                   data.table(Message='Too few years selected.')))
 
 selectPlots <- function(input) {
   i <- length(input$SelectedIndics)
@@ -936,7 +942,7 @@ server <- function(input, output, session) {
       if(!is.null(.) && any(grepl('Select all Policy Area',.)))
         updateSelectInput(session,
                           inputId = "SelectedIndics",
-                          selected = print(.) %>% 
+                          selected =  
                             grep('Select all Policy Area',.,value=TRUE) %>%
                             sub('Select all Policy Area (.+) Indicators','\\1',.) %>%
                             paste0('PA',.,'.') %>%
@@ -986,34 +992,8 @@ server <- function(input, output, session) {
              Sys.time() %>% gsub(':',".",.,fixed=TRUE) %>% substr(1,19),
              ".xlsx"),
     content = function(filename) {
-      dta <-
-        dataForExcel.(input)
-      col_nums <-
-        seq_along(colnames(dta))
-      wb <- 
-        createWorkbook(creator='DG EMPL F4 Statistical Team')
-      addWorksheet(wb, zoom=75,
-                   sheetName=
-                     paste('JAF',
-                           ifelse(identical(input$SelectedScore,'TRUE'),'Score','Value'),
-                           ifelse(identical(input$SelectedLevel,'TRUE'),'Level','Change')))
-      writeData(wb, 1, startRow = 1, startCol = 1,
-                x=paste(ifelse(identical(input$SelectedScore,'TRUE'),
-                               'Standardised Indicator Score (not Value)',
-                               'Actual Indicator Value (not Score)'),
-                        ifelse(identical(input$SelectedLevel,'TRUE'),
-                               '\u2014 Level (not Change)','\u2014 Change (not Level)')))
-      writeData(wb, 1, startRow = 2, startCol = 1,
-                x = dta)
-      addStyle(wb, 1, style = createStyle(textDecoration = "bold"), 
-               rows=1:2, cols=col_nums, gridExpand=TRUE)
-      addStyle(wb, 1, style = createStyle(halign = "right"), stack=TRUE,
-               rows=2, cols=col_nums %>% setdiff(1:3), gridExpand=TRUE)
-      freezePane(wb,1, firstActiveRow = 3, firstActiveCol = 4)
-      setColWidths(wb,1, cols=col_nums,
-                   widths=c(15, .82*max(nchar(dta$`Indicator Description`)), 10,
-                            rep.int(6,length(dta)-3)))
-      saveWorkbook(wb, filename, overwrite = TRUE)
+      dataForExcel.(input) %>% 
+        write.xlsx(filename, asTable=TRUE, colWidths='auto')
       session$sendCustomMessage("hideLoadingSpinner",list(message=TRUE))
     }
   )
