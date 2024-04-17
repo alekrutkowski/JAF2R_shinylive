@@ -375,7 +375,7 @@ basicLinePlot. <- function(input) {
                     xaxis=list(title=NULL,
                                dtick = 1, # Set gridlines at every integer
                                tickmode = "linear",
-                               range=c(min(dta$time),max(dta$time))),
+                               range=c(input$SelectedYears,max(dta$time))),
                     yaxis=list(title=list(text=paste0(ifScoresSelected(input, 'Score ', 'Indicator value '),
                                                       ifLevelsSelected(input, '(level)', '(change)')),
                                           font=list(size=18))),
@@ -428,7 +428,7 @@ linePlotGeoEU. <- function(input) {
                     xaxis=list(title=NULL,
                                dtick = 1, # Set gridlines at every integer
                                tickmode = "linear",
-                               range=c(min(dta$time),max(dta$time))),
+                               range=c(input$SelectedYears,max(dta$time))),
                     yaxis=list(title=list(text=paste0(ifScoresSelected(input, 'Score ', 'Indicator value '),
                                                       ifLevelsSelected(input, '(level)', '(change)')),
                                           font=list(size=18))),
