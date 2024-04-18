@@ -560,6 +560,7 @@ renderTbl <- function(input) {
   s <- identical(input$SelectedScore,'TRUE')
   g <- length(input$SelectedGeos)
   y <- input$SelectedYears < max(YEARS)
+  if (i>0 && any(grepl('\u2295|\u2296',input$SelectedIndics, perl = TRUE))) return(NULL)
   if (input$toggle)
     return(renderMsg('&#9888; App suspended by the user'))
   if (i==0 || g==0 ||
@@ -639,10 +640,10 @@ dataForExcel. <- function(input)
          .[JAF_KEY %in% input$SelectedIndics & geo %in% input$SelectedGeos,
            .(JAF_KEY,geo,time,score_change,flags_)]) %>% 
   lapply(\(x) `if`(nrow(x)>0,
-                     merge(x, DATA$JAF_NAMES_DESCRIPTIONS[,.(JAF_KEY,name)] %>% 
-                             order_by_JAF_KEY() %>% 
-                             .[, n := .I],
-                           by='JAF_KEY') %>% 
+                   merge(x, DATA$JAF_NAMES_DESCRIPTIONS[,.(JAF_KEY,name)] %>% 
+                           order_by_JAF_KEY() %>% 
+                           .[, n := .I],
+                         by='JAF_KEY') %>% 
                      setorder(n,geo,time) %>% 
                      .[, n := NULL],
                    data.table(Message='Too few years selected.')))
@@ -652,6 +653,7 @@ selectPlots <- function(input) {
   s <- identical(input$SelectedScore,'TRUE')
   g <- length(input$SelectedGeos)
   y <- input$SelectedYears < max(YEARS)
+  if (i>0 && any(grepl('\u2295|\u2296',input$SelectedIndics, perl = TRUE))) return(NULL)
   if (input$toggle) return(renderMsg('&#9888; App suspended by the user'))
   if (i==0 || g==0 ||
       i==1 && grepl('Remove all the selected',input$SelectedIndics) ||
@@ -840,6 +842,10 @@ ui <- fluidPage(
                 $('#loading').hide();
               });
             });
+          
+            Shiny.addCustomMessageHandler('SelectedIndics', function(value) {
+                Shiny.setInputValue('SelectedIndics', value);
+            });
 
         "))
   ),
@@ -931,17 +937,25 @@ ui <- fluidPage(
 
 server <- function(input, output, session) {
   
+  if (!IS_SHINYLIVE)
+    ### Ugly hack to force fresh R instance --- needed because of *** below
+    onStop(function() quit(save="no", status=0, runLast=FALSE)) 
+  
   output$tmp <- renderText(input$toggle)
   
-  observe({
+  
+  observe({ # *** Big problem with this section --- works fine only on fresh R instance, otherwise updateSelectInput() calls don't work
     input$SelectedIndics %>% {
-      if(!is.null(.) && '\u2295 Select all Main Indicators (can be slow!)' %in% .)
-        updateSelectInput(session,
+      if(!is.null(.) && '\u2295 Select all Main Indicators (can be slow!)' %in% .) 
+        updateSelectInput(session=session,
                           inputId = "SelectedIndics",
+                          choices=INDICATORS,
                           selected=Main_Indicators_Codes)
-      if(!is.null(.) && any(grepl('Select all Policy Area',.)))
-        updateSelectInput(session,
+      
+      if(!is.null(.) && any(grepl('Select all Policy Area',.))) 
+        updateSelectInput(session=session,
                           inputId = "SelectedIndics",
+                          choices=INDICATORS,
                           selected =  
                             grep('Select all Policy Area',.,value=TRUE) %>%
                             sub('Select all Policy Area (.+) Indicators','\\1',.) %>%
@@ -950,19 +964,21 @@ server <- function(input, output, session) {
                             gsub("[^\x01-\x7F]|\\s+", "", .) %>% # Remove non-ASCII characters like \u2295 and white space
                             grep(AllIndics, value=TRUE))
       if (!is.null(.) && '\u2296 Remove all the selected indicators' %in% .)
-        updateSelectInput(session,
+        updateSelectInput(session=session,
                           inputId = "SelectedIndics",
-                          selected=character(0))
+                          choices=INDICATORS,
+                          selected=NULL)
+      
     }})
   
   observe({
     input$SelectedGeos %>% {
       if (!is.null(.) && '\u2295 Select all the Member States' %in% .)
-        updateSelectInput(session,
+        updateSelectInput(session=session,
                           inputId = "SelectedGeos",
                           selected=DATA$EU_Members_geo_names$geo %>% .[nchar(.)==2])
       if (!is.null(.) && '\u2296 Remove all the selected countries' %in% .)
-        updateSelectInput(session,
+        updateSelectInput(session=session,
                           inputId = "SelectedGeos",
                           selected=character(0))
     }})
@@ -970,7 +986,7 @@ server <- function(input, output, session) {
   observe({
     input$SelectedScore  %>% {
       if (!identical(.,'TRUE'))
-        updateSelectInput(session,
+        updateSelectInput(session=session,
                           inputId = "SelectedIndics",
                           selected=grep('_popweighted_score',
                                         input$SelectedIndics,
