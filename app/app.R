@@ -6,6 +6,8 @@ library(kit)
 library(openxlsx)
 # dev mode: setwd('app')
 
+shiny:::flushReact()
+
 IS_SHINYLIVE <- 
   grepl("wasm",R.Version()$arch)
 
@@ -653,7 +655,6 @@ selectPlots <- function(input) {
   s <- identical(input$SelectedScore,'TRUE')
   g <- length(input$SelectedGeos)
   y <- input$SelectedYears < max(YEARS)
-  if (i>0 && any(grepl('\u2295|\u2296',input$SelectedIndics, perl = TRUE))) return(NULL)
   if (input$toggle) return(renderMsg('&#9888; App suspended by the user'))
   if (i==0 || g==0 ||
       i==1 && grepl('Remove all the selected',input$SelectedIndics) ||
@@ -875,8 +876,6 @@ ui <- fluidPage(
     multiple=TRUE,
     width = "100%"
   ),
-  # actionButton('SelectAllIndics','Select All',icon('check')),
-  # actionButton('SelectAllIndics','Select Other',icon('check')),
   selectInput(
     inputId = "SelectedGeos",
     label = HTML("<strong><big><big>&#x1F310;</big></big> Select countries or country aggregates,",kbd_info,'</strong>'),
@@ -937,38 +936,30 @@ ui <- fluidPage(
 
 server <- function(input, output, session) {
   
-  if (!IS_SHINYLIVE)
-    ### Ugly hack to force fresh R instance --- needed because of *** below
-    onStop(function() quit(save="no", status=0, runLast=FALSE)) 
-  
   output$tmp <- renderText(input$toggle)
   
-  
-  observe({ # *** Big problem with this section --- works fine only on fresh R instance, otherwise updateSelectInput() calls don't work
+  # priority=-10 needed to fix reactivity problems
+  observe(priority=-10, x={ 
     input$SelectedIndics %>% {
-      if(!is.null(.) && '\u2295 Select all Main Indicators (can be slow!)' %in% .) 
-        updateSelectInput(session=session,
-                          inputId = "SelectedIndics",
+      if(!is.null(.) && any(grepl('Select all Policy Area',.)))
+        updateSelectInput(inputId = "SelectedIndics",
                           choices=INDICATORS,
-                          selected=Main_Indicators_Codes)
-      
-      if(!is.null(.) && any(grepl('Select all Policy Area',.))) 
-        updateSelectInput(session=session,
-                          inputId = "SelectedIndics",
-                          choices=INDICATORS,
-                          selected =  
+                          selected =
                             grep('Select all Policy Area',.,value=TRUE) %>%
                             sub('Select all Policy Area (.+) Indicators','\\1',.) %>%
+                            sub('\u2295',"",.,fixed=TRUE) %>% 
+                            sub(' ',"",.,fixed=TRUE) %>% 
                             paste0('PA',.,'.') %>%
                             gsub('.','\\.',.,fixed=TRUE) %>% 
-                            gsub("[^\x01-\x7F]|\\s+", "", .) %>% # Remove non-ASCII characters like \u2295 and white space
                             grep(AllIndics, value=TRUE))
       if (!is.null(.) && '\u2296 Remove all the selected indicators' %in% .)
-        updateSelectInput(session=session,
-                          inputId = "SelectedIndics",
+        updateSelectInput(inputId = "SelectedIndics",
                           choices=INDICATORS,
                           selected=NULL)
-      
+      if(!is.null(.) && '\u2295 Select all Main Indicators (can be slow!)' %in% .)
+        updateSelectInput(inputId = "SelectedIndics",
+                          choices=INDICATORS,
+                          selected=Main_Indicators_Codes)
     }})
   
   observe({
