@@ -8,6 +8,14 @@ library(openxlsx)
 
 shiny:::flushReact()
 
+# https://stackoverflow.com/a/78358993
+# Workaround for Chromium Issue 468227
+downloadLink2 <- function(...) {
+  tag <- shiny::downloadLink(...)
+  tag$attribs$download <- NULL
+  tag
+}
+
 IS_SHINYLIVE <- 
   grepl("wasm",R.Version()$arch)
 
@@ -927,7 +935,7 @@ ui <- fluidPage(
     tabPanel("Table",
              conditionalPanel('input.SelectedIndics.length>0 && input.SelectedGeos.length>0 && (!EmptyTable() || !isLoadingSpinnerVisible())',
                               br(),
-                              downloadLink("TheDownloadLink", "\u2B73 Download the selected data as Excel file")),
+                              `if`(IS_SHINYLIVE,downloadLink2,downloadLink)("TheDownloadLink", "\u2B73 Download the selected data as Excel file")),
              br(),
              uiOutput("TheTable"))
   )
